@@ -24,10 +24,13 @@ class KronosEngine:
         )
 
         steps = [
+            ("Recherche de pseudos",
+             "modules.person.username_finder",
+             "UsernameFinder"),
             ("Email Hunter",
              "modules.person.email_hunter",
              "EmailHunter"),
-            ("Réseaux sociaux — 300+ plateformes",
+            ("Réseaux sociaux",
              "modules.person.social_scanner",
              "SocialScanner"),
             ("GitHub — profil, commits, emails",
@@ -39,13 +42,13 @@ class KronosEngine:
             ("Analyse comportementale",
              "modules.person.behavior_analyzer",
              "BehaviorAnalyzer"),
-            ("Géolocalisation — EXIF, check-ins",
+            ("Géolocalisation",
              "modules.person.geo_tracker",
              "GeoTracker"),
             ("Réseau de relations",
              "modules.person.network_mapper",
              "NetworkMapper"),
-            ("Analyse IA — corrélation",
+            ("Analyse IA",
              "modules.correlation.ai_analyst",
              "AIAnalyst"),
         ]

@@ -13,9 +13,18 @@ class BreachLookup:
         emails = []
         if self.target.email:
             emails.append(self.target.email)
-        emails.extend(self.target.emails_found[:3])
+        emails.extend([
+            e for e in self.target.emails_found
+            if e not in emails
+        ][:5])
+
+        if not emails:
+            console.print("    [dim]Aucun email à vérifier[/dim]")
+            return
 
         for email in emails:
+            console.print(f"    [dim]Vérification : {email}[/dim]")
+
             if self.hibp_key:
                 breaches = self._check_hibp(email)
                 if breaches:
@@ -29,16 +38,20 @@ class BreachLookup:
             if scylla:
                 self.target.breaches.extend(scylla)
 
-            total = len(self.target.breaches)
-            if total:
+        total = len(self.target.breaches)
+        if total:
+            console.print(
+                f"    [red]⚠ {total} fuite(s) détectée(s)[/red]"
+            )
+            for b in self.target.breaches[:5]:
                 console.print(
-                    f"    [red]⚠ {email} — "
-                    f"{total} fuite(s) détectée(s)[/red]"
+                    f"    [dim]→ {b.get('Name', '?')} "
+                    f"({b.get('source', '?')})[/dim]"
                 )
+        else:
+            console.print("    [green]Aucune fuite détectée[/green]")
 
     def _check_hibp(self, email: str) -> list:
-        if not self.hibp_key:
-            return []
         try:
             r = requests.get(
                 f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}",
@@ -48,9 +61,11 @@ class BreachLookup:
                 },
                 timeout=10
             )
-            return r.json() if r.status_code == 200 else []
-        except:
-            return []
+            if r.status_code == 200:
+                return [{**b, "source": "HIBP"} for b in r.json()]
+        except Exception:
+            pass
+        return []
 
     def _check_leakcheck(self, email: str) -> list:
         try:
@@ -61,12 +76,15 @@ class BreachLookup:
             if r.status_code == 200:
                 data = r.json()
                 if data.get("success") and data.get("found"):
-                    return [{
-                        "Name": src,
-                        "source": "LeakCheck",
-                        "email": email
-                    } for src in data.get("sources", [])]
-        except:
+                    return [
+                        {
+                            "Name": src,
+                            "source": "LeakCheck",
+                            "email": email,
+                        }
+                        for src in data.get("sources", [])
+                    ]
+        except Exception:
             pass
         return []
 
@@ -74,18 +92,18 @@ class BreachLookup:
         try:
             r = requests.get(
                 f"https://scylla.sh/search?q={email}",
-                headers={"User-Agent": "KRONOS-OSINT"},
+                headers={"User-Agent": "KRONOS-OSINT/1.0"},
                 timeout=10
             )
             if r.status_code == 200:
                 data = r.json()
-                if data:
+                if data and len(data) > 0:
                     return [{
                         "Name": "Scylla Database",
                         "source": "Scylla",
                         "email": email,
-                        "count": len(data)
+                        "count": len(data),
                     }]
-        except:
+        except Exception:
             pass
         return []

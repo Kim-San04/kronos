@@ -1,6 +1,5 @@
 import os
 import json
-from dataclasses import asdict
 from rich.console import Console
 
 console = Console()
@@ -19,41 +18,45 @@ class AIAnalyst:
             from groq import Groq
             client = Groq(api_key=self.api_key)
 
-            data = asdict(self.target)
-            summary = json.dumps(data, indent=2)[:3000]
+            data = self._prepare_summary()
 
-            prompt = f"""
-Tu es un expert en OSINT et threat intelligence.
-Analyse ces données collectées sur une cible et fournis :
-1. Un résumé exécutif (3-5 phrases)
-2. Les corrélations importantes entre les données
-3. Les risques identifiés
-4. Un score de risque global de 0 à 100
+            prompt = f"""Tu es un expert OSINT.
+Analyse ces données collectées sur une cible
+et fournis une analyse en JSON.
 
-Données :
-{summary}
+Données collectées :
+{json.dumps(data, indent=2, ensure_ascii=False)}
 
-Réponds en JSON :
+Réponds UNIQUEMENT en JSON valide :
 {{
-    "summary": "résumé...",
-    "correlations": ["corrélation 1", ...],
-    "risks": ["risque 1", ...],
-    "risk_score": 75
-}}
-"""
+    "summary": "résumé exécutif en 3 phrases",
+    "correlations": [
+        "corrélation importante 1",
+        "corrélation importante 2"
+    ],
+    "risks": [
+        "risque identifié 1",
+        "risque identifié 2"
+    ],
+    "risk_score": 75,
+    "recommendations": [
+        "recommandation 1"
+    ]
+}}"""
+
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000
+                max_tokens=1000,
+                timeout=30
             )
 
-            text = response.choices[0].message.content
-
-            # Extraire le JSON de la réponse
-            start = text.find("{")
-            end = text.rfind("}") + 1
-            if start >= 0 and end > start:
-                text = text[start:end]
+            text = response.choices[0].message.content.strip()
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            text = text.strip()
 
             result = json.loads(text)
 
@@ -61,55 +64,122 @@ Réponds en JSON :
             self.target.correlations = result.get("correlations", [])
             self.target.risk_score = int(result.get("risk_score", 0))
 
-            risks = result.get("risks", [])
             console.print(
-                f"    [cyan]IA : score {self.target.risk_score}/100, "
-                f"{len(risks)} risques identifiés[/cyan]"
+                f"    [cyan]Score de risque : "
+                f"{self.target.risk_score}/100[/cyan]"
             )
+            for c in self.target.correlations[:3]:
+                console.print(f"    [yellow]→ {c}[/yellow]")
 
         except Exception as e:
-            console.print(f"    [dim]Groq IA erreur : {e}[/dim]")
+            console.print(
+                f"    [dim]AI erreur : {e} — fallback règles[/dim]"
+            )
             self._rule_based_analysis()
+
+    def _prepare_summary(self) -> dict:
+        target_type = type(self.target).__name__
+
+        if target_type == "PersonTarget":
+            return {
+                "type": "personne",
+                "nom": self.target.name,
+                "emails": self.target.emails_found,
+                "pseudos": self.target.usernames_found,
+                "profils_sociaux": list(
+                    self.target.social_profiles.keys()
+                ),
+                "github": bool(self.target.github_data),
+                "fuites": len(self.target.breaches),
+                "localisations": self.target.locations,
+                "connexions": len(self.target.connections),
+                "pic_activite": self.target.activity_hours.get(
+                    "peak_hour"
+                ),
+                "langages_github": self.target.github_data.get(
+                    "languages", []
+                ),
+            }
+        else:
+            return {
+                "type": "entreprise",
+                "domaine": self.target.domain,
+                "ips": self.target.ips,
+                "sous_domaines": len(self.target.subdomains),
+                "ports_ouverts": self.target.open_ports,
+                "cves": self.target.cves,
+                "technologies": self.target.technologies,
+                "employes": len(self.target.employees),
+                "emails": self.target.emails,
+                "secrets_exposes": len(self.target.exposed_secrets),
+                "cloud_assets": len(self.target.cloud_assets),
+                "darkweb": len(self.target.darkweb_mentions),
+            }
 
     def _rule_based_analysis(self):
         score = 0
         correlations = []
 
-        if hasattr(self.target, "breaches") and self.target.breaches:
-            score += min(len(self.target.breaches) * 10, 30)
-            correlations.append(
-                f"{len(self.target.breaches)} fuite(s) de données détectée(s)"
-            )
+        if hasattr(self.target, "breaches"):
+            n = len(self.target.breaches)
+            if n > 0:
+                score += n * 15
+                correlations.append(
+                    f"{n} fuite(s) de données détectée(s)"
+                )
 
-        if hasattr(self.target, "exposed_secrets") and self.target.exposed_secrets:
-            score += min(len(self.target.exposed_secrets) * 15, 40)
-            correlations.append(
-                f"{len(self.target.exposed_secrets)} secret(s) exposé(s)"
-            )
+        if hasattr(self.target, "exposed_secrets"):
+            n = len(self.target.exposed_secrets)
+            if n > 0:
+                score += n * 25
+                correlations.append(
+                    f"{n} secret(s) exposé(s) sur GitHub"
+                )
 
-        if hasattr(self.target, "cves") and self.target.cves:
-            score += min(len(self.target.cves) * 5, 20)
-            correlations.append(
-                f"{len(self.target.cves)} CVE(s) identifiée(s)"
-            )
+        if hasattr(self.target, "cves"):
+            n = len(self.target.cves)
+            if n > 0:
+                score += n * 10
+                correlations.append(f"{n} CVE(s) identifiée(s)")
 
-        if hasattr(self.target, "darkweb_mentions") and self.target.darkweb_mentions:
-            score += min(len(self.target.darkweb_mentions) * 10, 20)
-            correlations.append("Présence sur le darkweb détectée")
+        if hasattr(self.target, "darkweb_mentions"):
+            n = len(self.target.darkweb_mentions)
+            if n > 0:
+                score += n * 20
+                correlations.append(f"{n} mention(s) darkweb")
 
-        if hasattr(self.target, "social_profiles") and self.target.social_profiles:
-            score += min(len(self.target.social_profiles) * 2, 10)
-            correlations.append(
-                f"{len(self.target.social_profiles)} profil(s) social(aux) identifié(s)"
-            )
+        if hasattr(self.target, "social_profiles"):
+            n = len(self.target.social_profiles)
+            if n > 0:
+                score += n * 3
+                correlations.append(
+                    f"{n} profil(s) social(aux) confirmé(s)"
+                )
+
+        if hasattr(self.target, "emails_found"):
+            emails = self.target.emails_found
+            if emails:
+                score += len(emails) * 5
+                correlations.append(
+                    f"{len(emails)} email(s) trouvé(s) : "
+                    f"{', '.join(emails[:2])}"
+                )
 
         self.target.risk_score = min(score, 100)
         self.target.correlations = correlations
-        self.target.ai_summary = (
-            "Analyse basée sur les règles (Groq non disponible). "
-            f"Score de risque calculé : {self.target.risk_score}/100."
-        )
+
+        if not self.target.ai_summary:
+            name = getattr(
+                self.target, "name",
+                getattr(self.target, "domain", "Cible")
+            )
+            self.target.ai_summary = (
+                f"Analyse KRONOS de {name}. "
+                f"Score de risque : {self.target.risk_score}/100. "
+                f"{len(correlations)} corrélation(s) identifiée(s)."
+            )
 
         console.print(
-            f"    [cyan]Analyse règles : score {self.target.risk_score}/100[/cyan]"
+            f"    [cyan]Score de risque : "
+            f"{self.target.risk_score}/100[/cyan]"
         )
