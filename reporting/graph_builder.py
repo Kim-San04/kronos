@@ -9,16 +9,22 @@ class GraphBuilder:
 
     def build(self, output_dir: str) -> str:
         os.makedirs(output_dir, exist_ok=True)
-
         name = getattr(
             self.target, "domain",
             getattr(self.target, "name", "target")
         ).replace(" ", "_")
-
         path = os.path.join(
             output_dir,
             f"kronos_graph_{name}_{self.session_id}.html"
         )
+        return self.build_to_path(path)
+
+    def build_to_path(self, path: str) -> str:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        name = getattr(
+            self.target, "domain",
+            getattr(self.target, "name", "target")
+        ).replace(" ", "_")
 
         nodes, edges = self._build_graph()
         html = self._render_html(nodes, edges, name)

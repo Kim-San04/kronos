@@ -60,6 +60,9 @@ class KronosEngine:
             ("Réseau de relations",
              "modules.person.network_mapper",
              "NetworkMapper"),
+            ("Validation des résultats",
+             "modules.person.result_validator",
+             "ResultValidator"),
             ("Analyse IA — corrélations",
              "modules.correlation.ai_analyst",
              "AIAnalyst"),
@@ -200,29 +203,32 @@ class KronosEngine:
         ))
 
     def _generate_outputs(self, target):
-        os.makedirs(self.args.output, exist_ok=True)
+        name = getattr(
+            target, "name",
+            getattr(target, "domain", "target")
+        ).replace(" ", "_")
+
+        session_dir = f"{self.args.output}/{name}_{self.session_id}"
+        raw_dir = f"{session_dir}/raw"
+        os.makedirs(session_dir, exist_ok=True)
+        os.makedirs(raw_dir, exist_ok=True)
 
         from export.kronos_export import KronosExport
         export = KronosExport(target, self.session_id)
-        json_path = export.save(self.args.output)
-        console.print(f"  [cyan]✓[/cyan] Export JSON : {json_path}")
+        export.save_to_path(f"{session_dir}/data.json")
 
         from reporting.graph_builder import GraphBuilder
         graph = GraphBuilder(target, self.session_id)
-        graph_path = graph.build(self.args.output)
-        console.print(f"  [cyan]✓[/cyan] Graphe : {graph_path}")
+        graph.build_to_path(f"{session_dir}/graph.html")
 
         if not self.args.no_pdf:
             from reporting.pdf_report import generate_pdf
-            name = getattr(
-                target, "domain",
-                getattr(target, "name", "target")
-            ).replace(" ", "_")
-            pdf_path = (
-                f"{self.args.output}/"
-                f"kronos_{name}_{self.session_id}.pdf"
-            )
-            generate_pdf(target, pdf_path)
-            console.print(
-                f"  [cyan]✓[/cyan] Rapport PDF : {pdf_path}"
-            )
+            generate_pdf(target, f"{session_dir}/report.pdf")
+
+        console.print(
+            f"\n  [bold cyan]✓ Résultats dans : "
+            f"{session_dir}[/bold cyan]"
+        )
+        console.print(f"  [dim]  ├── report.pdf[/dim]")
+        console.print(f"  [dim]  ├── graph.html[/dim]")
+        console.print(f"  [dim]  └── data.json[/dim]")
