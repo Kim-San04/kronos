@@ -222,8 +222,17 @@ class KronosEngine:
         graph.build_to_path(f"{session_dir}/graph.html")
 
         if not self.args.no_pdf:
-            from reporting.pdf_report import generate_pdf
-            generate_pdf(target, f"{session_dir}/report.pdf")
+            try:
+                from reporting.pdf_report import generate_pdf
+                pdf_path = f"{session_dir}/report.pdf"
+                generate_pdf(target, pdf_path)
+                console.print(
+                    f"  [cyan]✓[/cyan] Rapport PDF : {pdf_path}"
+                )
+            except Exception as e:
+                console.print(f"  [red]✗ PDF erreur : {e}[/red]")
+                import traceback
+                traceback.print_exc()
 
         console.print(
             f"\n  [bold cyan]✓ Résultats dans : "

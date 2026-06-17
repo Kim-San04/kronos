@@ -16,16 +16,27 @@ class SherlockRunner:
         self.target = target
 
     def run(self):
-        usernames = self._generate_usernames()
+        all_usernames = self._generate_usernames()
+
+        relevant = [
+            u for u in all_usernames
+            if self._is_relevant_username(u)
+        ]
+
+        if not relevant:
+            console.print(
+                "    [dim]Sherlock : aucun username pertinent à tester[/dim]"
+            )
+            return
 
         console.print(
             f"    [dim]Sherlock — test de "
-            f"{len(usernames)} username(s) sur 300+ sites...[/dim]"
+            f"{len(relevant)} username(s) pertinent(s) sur 300+ sites...[/dim]"
         )
 
         all_found = {}
 
-        for username in usernames:
+        for username in relevant[:4]:
             found = self._run_sherlock(username)
             if found:
                 all_found[username] = found
@@ -51,6 +62,13 @@ class SherlockRunner:
         if all_found:
             best = max(all_found, key=lambda k: len(all_found[k]))
             self.target.username = best
+
+    def _is_relevant_username(self, username: str) -> bool:
+        name_parts = [
+            p.lower() for p in self.target.name.split()
+            if len(p) > 2
+        ]
+        return any(part in username.lower() for part in name_parts)
 
     def _run_sherlock(self, username: str) -> dict:
         output_file = f"/tmp/sherlock_{username}.txt"

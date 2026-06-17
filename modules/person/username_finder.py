@@ -98,18 +98,17 @@ class UsernameFinder:
     def _test_username(self, username: str) -> list:
         found_on = []
 
+        # GitHub — API officielle, 100% fiable
         if self._check_github(username):
             found_on.append("GitHub")
-        if self._check_gitlab(username):
+
+        # GitLab — match exact + vérification du nom
+        if self._check_gitlab_strict(username):
             found_on.append("GitLab")
-        if self._check_hackernews(username):
-            found_on.append("HackerNews")
+
+        # Reddit — API fiable
         if self._check_reddit(username):
             found_on.append("Reddit")
-        if self._check_npm(username):
-            found_on.append("npm")
-        if self._check_pypi(username):
-            found_on.append("PyPI")
 
         return found_on
 
@@ -156,7 +155,7 @@ class UsernameFinder:
             pass
         return False
 
-    def _check_gitlab(self, username: str) -> bool:
+    def _check_gitlab_strict(self, username: str) -> bool:
         try:
             r = requests.get(
                 f"https://gitlab.com/api/v4/users?username={username}",
@@ -165,27 +164,20 @@ class UsernameFinder:
             if r.status_code == 200:
                 data = r.json()
                 if data:
-                    console.print(
-                        f"    [green]✓ GitLab : "
-                        f"gitlab.com/{username}[/green]"
-                    )
-                    return True
-        except Exception:
-            pass
-        return False
-
-    def _check_hackernews(self, username: str) -> bool:
-        try:
-            r = requests.get(
-                f"https://hacker-news.firebaseio.com/v0/user/{username}.json",
-                timeout=5
-            )
-            if r.status_code == 200 and r.json():
-                console.print(
-                    f"    [green]✓ HackerNews : "
-                    f"news.ycombinator.com/user?id={username}[/green]"
-                )
-                return True
+                    for user in data:
+                        if user.get("username", "").lower() == username.lower():
+                            gl_name = (user.get("name", "") or "").lower()
+                            target_parts = [
+                                p for p in self.target.name.lower().split()
+                                if len(p) > 2
+                            ]
+                            if any(p in gl_name for p in target_parts):
+                                console.print(
+                                    f"    [green]✓ GitLab : "
+                                    f"gitlab.com/{username} "
+                                    f"({user.get('name')})[/green]"
+                                )
+                                return True
         except Exception:
             pass
         return False
@@ -205,37 +197,6 @@ class UsernameFinder:
                         f"reddit.com/u/{username}[/green]"
                     )
                     return True
-        except Exception:
-            pass
-        return False
-
-    def _check_npm(self, username: str) -> bool:
-        try:
-            r = requests.get(
-                f"https://registry.npmjs.org/-/user/org.couchdb.user:{username}",
-                timeout=5
-            )
-            if r.status_code == 200:
-                console.print(
-                    f"    [green]✓ npm : npmjs.com/~{username}[/green]"
-                )
-                return True
-        except Exception:
-            pass
-        return False
-
-    def _check_pypi(self, username: str) -> bool:
-        try:
-            r = requests.get(
-                f"https://pypi.org/user/{username}/",
-                timeout=5,
-                allow_redirects=True
-            )
-            if r.status_code == 200 and "404" not in r.text[:500]:
-                console.print(
-                    f"    [green]✓ PyPI : pypi.org/user/{username}[/green]"
-                )
-                return True
         except Exception:
             pass
         return False

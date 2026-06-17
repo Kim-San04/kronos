@@ -48,10 +48,22 @@ def categorize_profiles(profiles: dict) -> dict:
 
 def generate_pdf(target, output_path: str):
     try:
-        from weasyprint import HTML
-    except ImportError:
-        _fallback_txt(target, output_path)
+        _generate_with_weasyprint(target, output_path)
         return
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[PDF] WeasyPrint erreur : {e}")
+
+    try:
+        _generate_with_fpdf(target, output_path)
+    except Exception as e2:
+        print(f"[PDF] FPDF2 erreur : {e2}")
+        _fallback_txt(target, output_path)
+
+
+def _generate_with_weasyprint(target, output_path: str):
+    from weasyprint import HTML
 
     name = getattr(target, "name", getattr(target, "domain", "Target"))
     date = datetime.now().strftime("%d %B %Y")
@@ -337,6 +349,93 @@ def generate_pdf(target, output_path: str):
 
     HTML(string=html).write_pdf(output_path)
     print(f"[KRONOS] Rapport PDF : {output_path}")
+
+
+def _generate_with_fpdf(target, output_path: str):
+    from fpdf import FPDF
+
+    name = getattr(target, "name", getattr(target, "domain", "Target"))
+    date = datetime.now().strftime("%d/%m/%Y")
+    profiles = getattr(target, "social_profiles", {})
+    emails = getattr(target, "emails_found", [])
+    breaches = getattr(target, "breaches", [])
+    risk_score = getattr(target, "risk_score", 0)
+    ai_summary = getattr(target, "ai_summary", "")
+    correlations = getattr(target, "correlations", [])
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Page de garde
+    pdf.set_font("Helvetica", "B", 32)
+    pdf.set_y(80)
+    pdf.cell(0, 20, "KRONOS", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 8, "OSINT Intelligence Report", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(20)
+
+    for label, value in [
+        ("Cible", name),
+        ("Date", date),
+        ("Score de risque", f"{risk_score}/100"),
+        ("Profils trouvés", str(len(profiles))),
+    ]:
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(55, 8, f"{label} :", new_x="RIGHT", new_y="LAST")
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(0, 8, value, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.add_page()
+
+    def section(num, title):
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, f"{num} — {title}", new_x="LMARGIN", new_y="NEXT")
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(4)
+
+    section("01", "Résumé exécutif")
+    if ai_summary:
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 6, ai_summary)
+    pdf.ln(8)
+
+    if emails:
+        section("02", f"Emails ({len(emails)})")
+        pdf.set_font("Courier", "", 10)
+        for email in emails:
+            pdf.cell(0, 6, f"  {email}", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
+
+    if profiles:
+        section("03", f"Profils en ligne ({len(profiles)})")
+        pdf.set_font("Courier", "", 9)
+        for platform, url in list(profiles.items())[:50]:
+            clean = platform.replace("Holehe_", "")
+            line = f"  {clean}: {url}"
+            if len(line) > 95:
+                line = line[:92] + "..."
+            pdf.cell(0, 5, line, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
+
+    if breaches:
+        section("04", f"Fuites de données ({len(breaches)})")
+        pdf.set_font("Helvetica", "", 10)
+        for b in breaches:
+            n = b.get("Name", b.get("name", "?"))
+            d = b.get("BreachDate", b.get("date", ""))[:4]
+            pdf.cell(0, 6, f"  ! {n} ({d})", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(8)
+
+    if correlations:
+        section("05", "Corrélations & Analyse")
+        pdf.set_font("Helvetica", "", 10)
+        for c in correlations:
+            pdf.multi_cell(0, 6, f"  - {c}")
+        pdf.ln(8)
+
+    pdf.output(output_path)
+    print(f"[KRONOS] PDF généré (fpdf2) : {output_path}")
 
 
 def _fallback_txt(target, output_path: str):
