@@ -13,33 +13,40 @@ class GitHubPerson:
             self.headers["Authorization"] = f"token {self.token}"
 
     def run(self):
+        user_provided = bool(self.target.username)
+
         username = (
             self.target.github_data.get("username")
             or self.target.username
+            or self._search_by_name()
         )
-
-        if not username:
-            username = self._search_by_name()
 
         if not username:
             console.print("    [dim]GitHub : aucun profil trouvé[/dim]")
             return
 
-        # Valider que le profil correspond bien à la cible
         profile = self._get_profile(username)
-        gh_name = (profile.get("name", "") or "").strip()
-        if not self._name_matches(gh_name):
-            console.print(
-                f"    [yellow]GitHub {username} : "
-                f"'{gh_name}' ≠ '{self.target.name}' — ignoré[/yellow]"
-            )
-            return
 
-        console.print(f"    [cyan]GitHub : {username} ({gh_name})[/cyan]")
+        # Username fourni explicitement → confiance totale
+        # Username trouvé automatiquement → vérifier le nom
+        if not user_provided:
+            gh_name = (profile.get("name", "") or "").strip()
+            if not self._name_matches(gh_name):
+                console.print(
+                    f"    [yellow]GitHub {username} : "
+                    f"'{gh_name}' != '{self.target.name}' — ignore[/yellow]"
+                )
+                return
+
+        console.print(
+            f"    [green]GitHub : github.com/{username}[/green]"
+        )
+
+        if profile.get("email"):
+            if profile["email"] not in self.target.emails_found:
+                self.target.emails_found.append(profile["email"])
 
         repos = self._get_repos(username)
-        console.print(f"    [cyan]{len(repos)} repos publics[/cyan]")
-
         commit_emails = self._scan_commits(username, repos[:10])
         for email in commit_emails:
             if email not in self.target.emails_found:
@@ -51,6 +58,7 @@ class GitHubPerson:
 
         self.target.github_data.update({
             "username": username,
+            "profile": profile,
             "repos_count": len(repos),
             "languages": langs,
             "commit_emails": commit_emails,
@@ -60,6 +68,7 @@ class GitHubPerson:
             console.print(
                 f"    [cyan]Langages : {', '.join(langs[:3])}[/cyan]"
             )
+        console.print(f"    [cyan]{len(repos)} repos publics[/cyan]")
 
     def _name_matches(self, gh_name: str) -> bool:
         if not gh_name:
