@@ -18,6 +18,21 @@ class UsernameFinder:
         self.token = os.getenv("GITHUB_TOKEN")
 
     def run(self):
+        # Username déjà fourni → tester directement, pas de génération
+        if self.target.username:
+            console.print(
+                f"    [cyan]Username fourni : {self.target.username}[/cyan]"
+            )
+            hits = self._test_username(self.target.username)
+            if hits:
+                console.print(
+                    f"    [green]✓ Trouvé sur : {', '.join(hits)}[/green]"
+                )
+                if self.target.username not in self.target.usernames_found:
+                    self.target.usernames_found.append(self.target.username)
+            return
+
+        # Sinon chercher automatiquement
         candidates = self._generate_all_variants(self.target.name)
         console.print(
             f"    [dim]{len(candidates)} variants générés...[/dim]"

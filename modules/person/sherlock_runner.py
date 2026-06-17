@@ -18,9 +18,11 @@ class SherlockRunner:
     def run(self):
         all_usernames = self._generate_usernames()
 
+        # Le username fourni explicitement est toujours pertinent
+        provided = self.target.username
         relevant = [
             u for u in all_usernames
-            if self._is_relevant_username(u)
+            if u == provided or self._is_relevant_username(u)
         ]
 
         if not relevant:

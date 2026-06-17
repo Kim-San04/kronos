@@ -25,6 +25,18 @@ class GitHubPerson:
             console.print("    [dim]GitHub : aucun profil trouvé[/dim]")
             return
 
+        # Valider que le profil correspond bien à la cible
+        profile = self._get_profile(username)
+        gh_name = (profile.get("name", "") or "").strip()
+        if not self._name_matches(gh_name):
+            console.print(
+                f"    [yellow]GitHub {username} : "
+                f"'{gh_name}' ≠ '{self.target.name}' — ignoré[/yellow]"
+            )
+            return
+
+        console.print(f"    [cyan]GitHub : {username} ({gh_name})[/cyan]")
+
         repos = self._get_repos(username)
         console.print(f"    [cyan]{len(repos)} repos publics[/cyan]")
 
@@ -49,6 +61,17 @@ class GitHubPerson:
                 f"    [cyan]Langages : {', '.join(langs[:3])}[/cyan]"
             )
 
+    def _name_matches(self, gh_name: str) -> bool:
+        if not gh_name:
+            return False
+        target_parts = [
+            p.lower() for p in self.target.name.split()
+            if len(p) > 2
+        ]
+        gh_lower = gh_name.lower()
+        matches = sum(1 for p in target_parts if p in gh_lower)
+        return matches >= 2
+
     def _search_by_name(self) -> str:
         try:
             r = requests.get(
@@ -61,19 +84,12 @@ class GitHubPerson:
                 for item in items:
                     profile = self._get_profile(item["login"])
                     if profile:
-                        gh_name = (
-                            profile.get("name", "") or ""
-                        ).lower()
-                        parts = [
-                            p for p in
-                            self.target.name.lower().split()
-                            if len(p) > 2
-                        ]
-                        if any(p in gh_name for p in parts):
+                        gh_name = (profile.get("name", "") or "").strip()
+                        if self._name_matches(gh_name):
                             console.print(
                                 f"    [green]GitHub trouvé : "
                                 f"{item['login']} "
-                                f"({profile.get('name')})[/green]"
+                                f"({gh_name})[/green]"
                             )
                             self.target.github_data["profile"] = profile
                             return item["login"]
