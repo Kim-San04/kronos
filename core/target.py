@@ -30,6 +30,16 @@ class PersonTarget:
     ai_summary: str = ""
     risk_score: int = 0
     correlations: List[str] = field(default_factory=list)
+    # Profiling IA
+    profile_type: str = ""
+    search_strategy: Dict = field(default_factory=dict)
+    priority_sources: List[str] = field(default_factory=list)
+    search_queries: List[str] = field(default_factory=list)
+    suggested_usernames: List[str] = field(default_factory=list)
+    ai_suggested_platforms: List[str] = field(default_factory=list)
+    # Contexte fourni par l'opérateur
+    notes: str = ""
+    company: str = ""
 
 @dataclass
 class CompanyTarget:

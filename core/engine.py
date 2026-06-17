@@ -21,19 +21,29 @@ class KronosEngine:
             email=getattr(self.args, "email", None),
             username=getattr(self.args, "username", None),
             phone=getattr(self.args, "phone", None),
+            notes=getattr(self.args, "notes", "") or "",
+            company=getattr(self.args, "employer", "") or "",
         )
 
+        if target.username:
+            console.print(
+                f"  [cyan]Username fourni : {target.username}[/cyan]"
+            )
+
         steps = [
-            ("Username finder",
+            ("Profilage IA de la cible",
+             "modules.person.profiler",
+             "TargetProfiler"),
+            ("Recherche ciblée par profil",
+             "modules.person.smart_searcher",
+             "SmartSearcher"),
+            ("Recherche de pseudos",
              "modules.person.username_finder",
              "UsernameFinder"),
             ("Sherlock — 300+ plateformes",
              "modules.person.sherlock_runner",
              "SherlockRunner"),
-            ("Maigret — analyse approfondie",
-             "modules.person.maigret_runner",
-             "MaigretRunner"),
-            ("GitHub — commits, emails",
+            ("GitHub — profil, commits, README",
              "modules.person.github_person",
              "GitHubPerson"),
             ("Email Hunter",
@@ -45,10 +55,13 @@ class KronosEngine:
             ("Fuites de données",
              "modules.person.breach_lookup",
              "BreachLookup"),
-            ("Google Dorking",
+            ("Google Dorking contextuel",
              "modules.person.google_dorker",
              "GoogleDorker"),
-            ("Recherche numéro",
+            ("Pivot récursif — nouvelles ancres",
+             "modules.person.recursive_pivot",
+             "RecursivePivot"),
+            ("Recherche numéro de téléphone",
              "modules.person.phone_finder",
              "PhoneFinder"),
             ("Recherche photos",

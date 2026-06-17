@@ -57,6 +57,19 @@ Examples:
         help="Nom de l'organisation GitHub"
     )
     parser.add_argument(
+        "--notes",
+        metavar="TEXT",
+        help=(
+            "Contexte supplémentaire sur la cible "
+            "(ex: 'étudiant EFREI Bordeaux cybersec')"
+        )
+    )
+    parser.add_argument(
+        "--employer",
+        metavar="COMPANY",
+        help="Entreprise connue de la cible (personne)"
+    )
+    parser.add_argument(
         "--output", "-o",
         metavar="DIR",
         default="./output",
