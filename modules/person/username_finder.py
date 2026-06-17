@@ -40,7 +40,12 @@ class UsernameFinder:
             self.target.username = best["username"]
             self.target.usernames_found = list(confirmed.keys())
         else:
-            console.print("    [dim]Aucun pseudo confirmé[/dim]")
+            console.print(
+                "    [yellow]Aucun username confirmé automatiquement.[/yellow]"
+            )
+            console.print(
+                "    [dim]Conseil : utiliser --username pour de meilleurs résultats[/dim]"
+            )
 
     def _generate_all_variants(self, name: str) -> list:
         parts = name.lower().strip().split()
@@ -128,29 +133,32 @@ class UsernameFinder:
                     p for p in self.target.name.lower().split()
                     if len(p) > 2
                 ]
-                if any(p in gh_name for p in target_parts):
-                    console.print(
-                        f"    [green]✓ GitHub : "
-                        f"github.com/{username} "
-                        f"({data.get('name')})[/green]"
-                    )
-                    self.target.github_data = {
-                        "username": username,
-                        "profile": data,
-                        "url": data.get("html_url"),
-                    }
-                    if data.get("email"):
-                        e = data["email"]
-                        if e not in self.target.emails_found:
-                            self.target.emails_found.append(e)
-                    if data.get("location"):
-                        self.target.locations.append({
-                            "source": "GitHub",
-                            "location": data["location"],
-                        })
-                    return True
-                elif r.status_code == 200:
-                    return True
+                # Rejecter si le nom affiché ne correspond pas
+                if not gh_name or not any(
+                    p in gh_name for p in target_parts
+                ):
+                    return False
+
+                console.print(
+                    f"    [green]✓ GitHub : "
+                    f"github.com/{username} "
+                    f"({data.get('name')})[/green]"
+                )
+                self.target.github_data = {
+                    "username": username,
+                    "profile": data,
+                    "url": data.get("html_url"),
+                }
+                if data.get("email"):
+                    e = data["email"]
+                    if e not in self.target.emails_found:
+                        self.target.emails_found.append(e)
+                if data.get("location"):
+                    self.target.locations.append({
+                        "source": "GitHub",
+                        "location": data["location"],
+                    })
+                return True
         except Exception:
             pass
         return False
@@ -205,8 +213,17 @@ class UsernameFinder:
         if not confirmed:
             return None
 
+        # Priorité absolue : username confirmé sur GitHub
+        # avec un nom qui correspond à la cible
+        github_confirmed = {
+            u: p for u, p in confirmed.items()
+            if "GitHub" in p
+        }
+
+        pool = github_confirmed if github_confirmed else confirmed
+
         sorted_c = sorted(
-            confirmed.items(),
+            pool.items(),
             key=lambda x: len(x[1]),
             reverse=True
         )
@@ -216,6 +233,11 @@ class UsernameFinder:
             console.print(
                 f"    [cyan]→ {username}[/cyan] ({', '.join(platforms)})"
             )
+
+        # Ne retourner un résultat que si GitHub est dans la liste
+        # (validation la plus fiable)
+        if not github_confirmed:
+            return None
 
         best_u, best_p = sorted_c[0]
         return {

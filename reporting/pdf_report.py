@@ -1,73 +1,9 @@
+from fpdf import FPDF
 from datetime import datetime
 
-CATEGORIES = {
-    "Réseaux sociaux": [
-        "twitter", "instagram", "linkedin", "facebook",
-        "tiktok", "youtube", "snapchat", "pinterest",
-        "mastodon", "bluesky", "bsky", "threads"
-    ],
-    "Gaming": [
-        "steam", "xbox", "playstation", "twitch",
-        "discord", "chess", "osu", "pokemon",
-        "warframe", "runescape", "roblox"
-    ],
-    "Développement": [
-        "github", "gitlab", "codeberg", "gitea",
-        "stackoverflow", "hackerrank", "codeforces",
-        "hackerearth", "leetcode", "codewars",
-        "hackerone", "bugcrowd"
-    ],
-    "Créatif": [
-        "behance", "dribbble", "deviantart",
-        "soundcloud", "mixcloud", "spotify",
-        "vimeo", "dailymotion", "medium", "dev.to"
-    ],
-    "Autre": []
-}
-
-def categorize_profiles(profiles: dict) -> dict:
-    categorized = {cat: {} for cat in CATEGORIES}
-
-    for platform, url in profiles.items():
-        platform_lower = platform.lower()
-        assigned = False
-
-        for category, keywords in CATEGORIES.items():
-            if category == "Autre":
-                continue
-            if any(kw in platform_lower for kw in keywords):
-                categorized[category][platform] = url
-                assigned = True
-                break
-
-        if not assigned:
-            categorized["Autre"][platform] = url
-
-    return {k: v for k, v in categorized.items() if v}
-
-
 def generate_pdf(target, output_path: str):
-    try:
-        _generate_with_weasyprint(target, output_path)
-        return
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"[PDF] WeasyPrint erreur : {e}")
-
-    try:
-        _generate_with_fpdf(target, output_path)
-    except Exception as e2:
-        print(f"[PDF] FPDF2 erreur : {e2}")
-        _fallback_txt(target, output_path)
-
-
-def _generate_with_weasyprint(target, output_path: str):
-    from weasyprint import HTML
-
     name = getattr(target, "name", getattr(target, "domain", "Target"))
     date = datetime.now().strftime("%d %B %Y")
-
     profiles = getattr(target, "social_profiles", {})
     emails = getattr(target, "emails_found", [])
     breaches = getattr(target, "breaches", [])
@@ -75,377 +11,294 @@ def _generate_with_weasyprint(target, output_path: str):
     correlations = getattr(target, "correlations", [])
     risk_score = getattr(target, "risk_score", 0)
     ai_summary = getattr(target, "ai_summary", "")
-
-    categorized = categorize_profiles(profiles)
-
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page {{
-    size: A4;
-    margin: 20mm 22mm 22mm 22mm;
-  }}
-  body {{
-    font-family: Georgia, serif;
-    color: #111;
-    font-size: 11pt;
-    line-height: 1.7;
-  }}
-  .cover {{
-    text-align: center;
-    padding: 60px 0;
-    border-bottom: 2px solid #111;
-    margin-bottom: 40px;
-  }}
-  .cover h1 {{
-    font-family: 'Courier New', monospace;
-    font-size: 36pt;
-    font-weight: 900;
-    letter-spacing: 12px;
-    margin: 0 0 8px;
-    text-indent: 12px;
-  }}
-  .cover .subtitle {{
-    font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 4px;
-    color: #666;
-    text-transform: uppercase;
-    margin: 0 0 40px;
-  }}
-  .cover .meta {{
-    display: inline-block;
-    border: 0.5px solid #ccc;
-    padding: 16px 32px;
-    text-align: left;
-  }}
-  .cover .meta-row {{
-    display: flex;
-    gap: 16px;
-    margin: 4px 0;
-  }}
-  .cover .meta-label {{
-    font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 2px;
-    color: #999;
-    min-width: 80px;
-    text-transform: uppercase;
-  }}
-  .cover .meta-value {{
-    font-family: 'Courier New', monospace;
-    font-size: 10pt;
-    color: #111;
-  }}
-  .section-num {{
-    font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 5px;
-    color: #aaa;
-    margin-bottom: 4px;
-    text-transform: uppercase;
-  }}
-  h2 {{
-    font-size: 18pt;
-    font-weight: bold;
-    border-bottom: 1px solid #111;
-    padding-bottom: 8px;
-    margin: 32px 0 16px;
-  }}
-  h3 {{
-    font-size: 12pt;
-    font-weight: bold;
-    margin: 20px 0 8px;
-    color: #333;
-  }}
-  .metrics {{
-    display: flex;
-    gap: 0;
-    border: 0.5px solid #ddd;
-    margin: 20px 0;
-  }}
-  .metric {{
-    flex: 1;
-    padding: 16px;
-    text-align: center;
-    border-right: 0.5px solid #ddd;
-  }}
-  .metric:last-child {{ border-right: none; }}
-  .metric-value {{
-    font-family: 'Courier New', monospace;
-    font-size: 22pt;
-    font-weight: bold;
-  }}
-  .metric-label {{
-    font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 2px;
-    color: #999;
-    margin-top: 4px;
-    text-transform: uppercase;
-  }}
-  .profile-url {{
-    font-family: 'Courier New', monospace;
-    font-size: 9pt;
-    color: #444;
-    padding: 4px 0;
-    border-bottom: 0.5px solid #f0f0f0;
-    word-break: break-all;
-  }}
-  .profile-platform {{
-    font-weight: bold;
-    color: #111;
-    min-width: 140px;
-    display: inline-block;
-  }}
-  .email-item {{
-    font-family: 'Courier New', monospace;
-    font-size: 10pt;
-    padding: 6px 0;
-    border-bottom: 0.5px solid #eee;
-  }}
-  .breach-item {{
-    padding: 8px 0;
-    border-bottom: 0.5px solid #eee;
-    font-size: 10pt;
-  }}
-  .breach-name {{ font-weight: bold; }}
-  .breach-meta {{
-    font-family: 'Courier New', monospace;
-    font-size: 9pt;
-    color: #888;
-    margin-left: 8px;
-  }}
-  .correlation-item {{
-    padding: 6px 0 6px 16px;
-    border-left: 2px solid #111;
-    margin-bottom: 8px;
-    font-size: 10pt;
-  }}
-  .summary {{
-    background: #f9f9f9;
-    border: 0.5px solid #eee;
-    padding: 16px 20px;
-    margin: 16px 0;
-    font-size: 11pt;
-    line-height: 1.8;
-  }}
-  .location-item {{
-    font-family: 'Courier New', monospace;
-    font-size: 10pt;
-    padding: 4px 0;
-  }}
-  .confidential {{
-    text-align: center;
-    font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 3px;
-    color: #bbb;
-    text-transform: uppercase;
-    margin-top: 40px;
-  }}
-</style>
-</head>
-<body>
-
-<div class="cover">
-  <h1>KRONOS</h1>
-  <div class="subtitle">OSINT Intelligence Report</div>
-  <div class="meta">
-    <div class="meta-row">
-      <span class="meta-label">Cible</span>
-      <span class="meta-value">{name}</span>
-    </div>
-    <div class="meta-row">
-      <span class="meta-label">Date</span>
-      <span class="meta-value">{date}</span>
-    </div>
-    <div class="meta-row">
-      <span class="meta-label">Score</span>
-      <span class="meta-value">{risk_score}/100</span>
-    </div>
-    <div class="meta-row">
-      <span class="meta-label">Profils</span>
-      <span class="meta-value">{len(profiles)}</span>
-    </div>
-  </div>
-  <div class="confidential">Confidentiel — Usage restreint</div>
-</div>
-
-<div class="section-num">01</div>
-<h2>Résumé exécutif</h2>
-<div class="summary">{ai_summary or f"Analyse OSINT de {name}. {len(profiles)} profil(s) trouvé(s) sur {len(categorized)} catégorie(s). Score de risque : {risk_score}/100."}</div>
-
-<div class="metrics">
-  <div class="metric">
-    <div class="metric-value">{len(profiles)}</div>
-    <div class="metric-label">Profils</div>
-  </div>
-  <div class="metric">
-    <div class="metric-value">{len(emails)}</div>
-    <div class="metric-label">Emails</div>
-  </div>
-  <div class="metric">
-    <div class="metric-value">{len(breaches)}</div>
-    <div class="metric-label">Fuites</div>
-  </div>
-  <div class="metric">
-    <div class="metric-value">{risk_score}</div>
-    <div class="metric-label">Score</div>
-  </div>
-</div>
-"""
-
-    if emails:
-        html += "\n<div class=\"section-num\">02</div>\n<h2>Emails identifiés</h2>\n"
-        for email in emails:
-            html += f'<div class="email-item">✉ {email}</div>\n'
-
-    if categorized:
-        html += "\n<div class=\"section-num\">03</div>\n<h2>Profils en ligne</h2>\n"
-        for category, profs in categorized.items():
-            html += f"<h3>{category} ({len(profs)})</h3>\n"
-            for platform, url in profs.items():
-                clean = platform.replace("Holehe_", "").replace("_", " ")
-                html += (
-                    f'<div class="profile-url">'
-                    f'<span class="profile-platform">{clean}</span>'
-                    f'{url}</div>\n'
-                )
-
-    if breaches:
-        html += "\n<div class=\"section-num\">04</div>\n<h2>Fuites de données</h2>\n"
-        for b in breaches:
-            bname = b.get("Name", b.get("name", "?"))
-            bdate = b.get("BreachDate", b.get("date", ""))[:4]
-            bsrc = b.get("source", "")
-            html += (
-                f'<div class="breach-item">'
-                f'<span class="breach-name">⚠ {bname}</span>'
-                f'<span class="breach-meta">{bdate}</span>'
-                f'<span class="breach-meta">via {bsrc}</span>'
-                f'</div>\n'
-            )
-
-    if locations:
-        html += "\n<div class=\"section-num\">05</div>\n<h2>Localisations</h2>\n"
-        for loc in locations:
-            html += (
-                f'<div class="location-item">'
-                f'📍 {loc.get("location", "?")} '
-                f'<span style="color:#999;font-size:9pt">'
-                f'({loc.get("source", "?")})</span>'
-                f'</div>\n'
-            )
-
-    if correlations:
-        html += "\n<div class=\"section-num\">06</div>\n<h2>Corrélations &amp; Analyse</h2>\n"
-        for corr in correlations:
-            html += f'<div class="correlation-item">{corr}</div>\n'
-
-    html += "\n</body>\n</html>"
-
-    HTML(string=html).write_pdf(output_path)
-    print(f"[KRONOS] Rapport PDF : {output_path}")
-
-
-def _generate_with_fpdf(target, output_path: str):
-    from fpdf import FPDF
-
-    name = getattr(target, "name", getattr(target, "domain", "Target"))
-    date = datetime.now().strftime("%d/%m/%Y")
-    profiles = getattr(target, "social_profiles", {})
-    emails = getattr(target, "emails_found", [])
-    breaches = getattr(target, "breaches", [])
-    risk_score = getattr(target, "risk_score", 0)
-    ai_summary = getattr(target, "ai_summary", "")
-    correlations = getattr(target, "correlations", [])
+    usernames = getattr(target, "usernames_found", [])
 
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_margins(20, 20, 20)
+
+    # ─────────────────────────────
+    # PAGE DE GARDE
+    # ─────────────────────────────
     pdf.add_page()
 
-    # Page de garde
-    pdf.set_font("Helvetica", "B", 32)
-    pdf.set_y(80)
-    pdf.cell(0, 20, "KRONOS", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 8, "OSINT Intelligence Report", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(20)
+    # Dégradé simulé avec rectangles
+    for i in range(100):
+        gray = int(255 - (i * 0.6))
+        pdf.set_fill_color(gray, gray, gray)
+        pdf.rect(0, i * 2.97, 210, 2.97, "F")
 
+    cx = 105
+    pdf.set_draw_color(20, 20, 20)
+    pdf.set_fill_color(20, 20, 20)
+    pdf.set_line_width(0.5)
+
+    # Tête de lance
+    pdf.polygon([
+        [cx - 8, 60], [cx + 8, 60],
+        [cx + 4, 40], [cx - 4, 40],
+    ], style="F")
+    pdf.polygon([
+        [cx - 4, 40], [cx + 4, 40], [cx, 25],
+    ], style="F")
+
+    # Manche
+    pdf.set_line_width(3)
+    pdf.line(cx, 60, cx, 200)
+
+    # Garde
+    pdf.set_line_width(1.5)
+    pdf.line(cx - 15, 110, cx + 15, 110)
+    pdf.line(cx - 10, 120, cx + 10, 120)
+
+    # Embout
+    pdf.set_fill_color(20, 20, 20)
+    pdf.polygon([
+        [cx - 3, 200], [cx + 3, 200], [cx, 215],
+    ], style="F")
+
+    # KRONOS
+    pdf.set_font("Courier", "B", 52)
+    pdf.set_text_color(20, 20, 20)
+    pdf.set_y(225)
+    pdf.cell(0, 20, "KRONOS", align="C", new_x="LMARGIN", new_y="NEXT")
+
+    # Trait
+    pdf.set_draw_color(80, 80, 80)
+    pdf.set_line_width(0.3)
+    pdf.line(60, 248, 150, 248)
+
+    # Sous-titre
+    pdf.set_font("Courier", "", 8)
+    pdf.set_text_color(100, 100, 100)
+    pdf.set_y(252)
+    pdf.cell(0, 6, "OSINT INTELLIGENCE SYSTEM", align="C", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_y(275)
+    pdf.set_font("Courier", "", 7)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 5, "CONFIDENTIEL — USAGE RESTREINT", align="C", new_x="LMARGIN", new_y="NEXT")
+
+    # ─────────────────────────────
+    # FONCTIONS UTILITAIRES
+    # ─────────────────────────────
+    def page_header():
+        pdf.set_font("Courier", "", 7)
+        pdf.set_text_color(150, 150, 150)
+        pdf.set_y(12)
+        pdf.cell(0, 4, "KRONOS — OSINT INTELLIGENCE REPORT", align="L", new_x="RIGHT", new_y="LAST")
+        pdf.cell(0, 4, f"{name} · {date}", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_draw_color(200, 200, 200)
+        pdf.set_line_width(0.2)
+        pdf.line(20, 18, 190, 18)
+        pdf.set_text_color(20, 20, 20)
+        pdf.set_y(24)
+
+    def section_title(num: str, title: str):
+        pdf.ln(6)
+        pdf.set_font("Courier", "", 7)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 4, num, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(20, 20, 20)
+        pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_draw_color(20, 20, 20)
+        pdf.set_line_width(0.5)
+        pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+        pdf.ln(6)
+
+    def add_footer():
+        pdf.set_y(-15)
+        pdf.set_font("Courier", "", 8)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 4, f"— {pdf.page_no()} —", align="C")
+
+    # ─────────────────────────────
+    # PAGE 2 — RÉSUMÉ
+    # ─────────────────────────────
+    pdf.add_page()
+    page_header()
+
+    # Métriques
+    metrics = [
+        ("PROFILS", str(len(profiles))),
+        ("EMAILS", str(len(emails))),
+        ("FUITES", str(len(breaches))),
+        ("SCORE", f"{risk_score}/100"),
+    ]
+
+    col_w = 42
+    y_metrics = pdf.get_y()
+    for i, (label, value) in enumerate(metrics):
+        x = 20 + i * col_w
+        pdf.set_draw_color(200, 200, 200)
+        pdf.set_line_width(0.3)
+        pdf.rect(x, y_metrics, col_w - 2, 20)
+
+        pdf.set_font("Courier", "B", 16)
+        pdf.set_text_color(20, 20, 20)
+        pdf.set_xy(x, y_metrics + 2)
+        pdf.cell(col_w - 2, 8, value, align="C")
+
+        pdf.set_font("Courier", "", 7)
+        pdf.set_text_color(120, 120, 120)
+        pdf.set_xy(x, y_metrics + 12)
+        pdf.cell(col_w - 2, 5, label, align="C")
+
+    pdf.set_y(y_metrics + 28)
+
+    section_title("01", "Résumé exécutif")
+
+    if ai_summary:
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(50, 50, 50)
+        pdf.multi_cell(0, 6, ai_summary)
+
+    pdf.ln(4)
     for label, value in [
         ("Cible", name),
         ("Date", date),
-        ("Score de risque", f"{risk_score}/100"),
-        ("Profils trouvés", str(len(profiles))),
+        ("Pseudos détectés", ", ".join(usernames[:5]) or "—"),
     ]:
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(55, 8, f"{label} :", new_x="RIGHT", new_y="LAST")
-        pdf.set_font("Helvetica", "", 11)
-        pdf.cell(0, 8, value, new_x="LMARGIN", new_y="NEXT")
-
-    pdf.add_page()
-
-    def section(num, title):
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, f"{num} — {title}", new_x="LMARGIN", new_y="NEXT")
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        pdf.ln(4)
-
-    section("01", "Résumé exécutif")
-    if ai_summary:
+        pdf.set_font("Courier", "", 8)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(50, 6, label.upper(), new_x="RIGHT", new_y="LAST")
         pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 6, ai_summary)
-    pdf.ln(8)
+        pdf.set_text_color(20, 20, 20)
+        pdf.cell(0, 6, str(value), new_x="LMARGIN", new_y="NEXT")
 
+    add_footer()
+
+    # ─────────────────────────────
+    # EMAILS
+    # ─────────────────────────────
     if emails:
-        section("02", f"Emails ({len(emails)})")
-        pdf.set_font("Courier", "", 10)
+        pdf.add_page()
+        page_header()
+        section_title("02", f"Emails identifiés ({len(emails)})")
+
         for email in emails:
-            pdf.cell(0, 6, f"  {email}", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(8)
+            pdf.set_font("Courier", "", 10)
+            pdf.set_text_color(20, 20, 20)
+            pdf.cell(8, 7, "-", new_x="RIGHT", new_y="LAST")
+            pdf.cell(0, 7, email, new_x="LMARGIN", new_y="NEXT")
+            pdf.set_draw_color(230, 230, 230)
+            pdf.set_line_width(0.2)
+            pdf.line(20, pdf.get_y(), 190, pdf.get_y())
 
+        add_footer()
+
+    # ─────────────────────────────
+    # PROFILS SOCIAUX
+    # ─────────────────────────────
     if profiles:
-        section("03", f"Profils en ligne ({len(profiles)})")
-        pdf.set_font("Courier", "", 9)
-        for platform, url in list(profiles.items())[:50]:
-            clean = platform.replace("Holehe_", "")
-            line = f"  {clean}: {url}"
-            if len(line) > 95:
-                line = line[:92] + "..."
-            pdf.cell(0, 5, line, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(8)
+        categories = {
+            "Réseaux sociaux": [],
+            "Gaming": [],
+            "Développement": [],
+            "Autre": [],
+        }
+        social_kw = [
+            "twitter", "instagram", "linkedin", "facebook",
+            "tiktok", "youtube", "snapchat", "bsky", "mastodon",
+            "discord", "clubhouse", "holehe_twitter",
+            "holehe_instagram", "holehe_facebook"
+        ]
+        gaming_kw = [
+            "steam", "chess", "osu", "pokemon", "warframe",
+            "runescape", "smule", "twitch", "xbox", "playstation"
+        ]
+        dev_kw = [
+            "github", "gitlab", "codeberg", "hackerone", "bugcrowd",
+            "codewars", "codeforces", "hackmd", "gitea", "stackoverflow"
+        ]
 
+        for platform, url in profiles.items():
+            pl = platform.lower()
+            if any(k in pl for k in social_kw):
+                categories["Réseaux sociaux"].append((platform, url))
+            elif any(k in pl for k in gaming_kw):
+                categories["Gaming"].append((platform, url))
+            elif any(k in pl for k in dev_kw):
+                categories["Développement"].append((platform, url))
+            else:
+                categories["Autre"].append((platform, url))
+
+        sec_num = 3
+        for cat, items in categories.items():
+            if not items:
+                continue
+            pdf.add_page()
+            page_header()
+            section_title(f"0{sec_num}", f"{cat} ({len(items)})")
+            sec_num += 1
+
+            for platform, url in items:
+                clean = platform.replace("Holehe_", "").replace("_", " ")
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.set_text_color(20, 20, 20)
+                pdf.cell(45, 6, clean[:22], new_x="RIGHT", new_y="LAST")
+                pdf.set_font("Courier", "", 8)
+                pdf.set_text_color(80, 80, 80)
+                url_short = url[:62] + "..." if len(url) > 62 else url
+                pdf.cell(0, 6, url_short, new_x="LMARGIN", new_y="NEXT")
+                pdf.set_draw_color(230, 230, 230)
+                pdf.set_line_width(0.1)
+                pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+
+            add_footer()
+
+    # ─────────────────────────────
+    # FUITES
+    # ─────────────────────────────
     if breaches:
-        section("04", f"Fuites de données ({len(breaches)})")
-        pdf.set_font("Helvetica", "", 10)
-        for b in breaches:
-            n = b.get("Name", b.get("name", "?"))
-            d = b.get("BreachDate", b.get("date", ""))[:4]
-            pdf.cell(0, 6, f"  ! {n} ({d})", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(8)
+        pdf.add_page()
+        page_header()
+        section_title("0X", f"Fuites de données ({len(breaches)})")
 
+        for breach in breaches:
+            n = breach.get("Name", breach.get("name", "?"))
+            d = breach.get("date", breach.get("BreachDate", "?"))
+            if isinstance(d, str):
+                d = d[:4]
+            src = breach.get("source", "")
+
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(20, 20, 20)
+            pdf.cell(0, 6, f"!  {n}", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Courier", "", 8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(0, 5, f"   {d}  —  {src}", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_draw_color(200, 200, 200)
+            pdf.set_line_width(0.2)
+            pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+            pdf.ln(2)
+
+        add_footer()
+
+    # ─────────────────────────────
+    # CORRÉLATIONS
+    # ─────────────────────────────
     if correlations:
-        section("05", "Corrélations & Analyse")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.add_page()
+        page_header()
+        section_title("0X", "Analyse & Corrélations")
+
         for c in correlations:
-            pdf.multi_cell(0, 6, f"  - {c}")
-        pdf.ln(8)
+            pdf.set_draw_color(20, 20, 20)
+            pdf.set_line_width(1)
+            pdf.line(20, pdf.get_y() + 3, 22, pdf.get_y() + 3)
+            pdf.set_line_width(0.2)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.set_text_color(50, 50, 50)
+            pdf.set_x(26)
+            pdf.multi_cell(0, 6, c)
+            pdf.ln(4)
 
-    pdf.output(output_path)
-    print(f"[KRONOS] PDF généré (fpdf2) : {output_path}")
+        add_footer()
 
-
-def _fallback_txt(target, output_path: str):
-    txt_path = output_path.replace(".pdf", ".txt")
-    name = getattr(target, "name", getattr(target, "domain", "target"))
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(f"KRONOS Report — {name}\n")
-        f.write(f"Generated: {datetime.now().isoformat()}\n")
-        f.write(f"Risk Score: {target.risk_score}/100\n\n")
-        if target.ai_summary:
-            f.write(f"Summary:\n{target.ai_summary}\n\n")
-        for c in target.correlations:
-            f.write(f"- {c}\n")
+    try:
+        pdf.output(output_path)
+        print(f"[KRONOS] PDF généré : {output_path}")
+    except Exception as e:
+        print(f"[KRONOS] Erreur PDF save : {e}")
