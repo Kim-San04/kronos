@@ -265,191 +265,139 @@ class DeepCrawler:
         if not isinstance(self.target.deep_data, dict):
             self.target.deep_data = {}
 
-        console.print("    [dim]LinkedIn deep crawl...[/dim]")
+        console.print("    [dim]LinkedIn scraping...[/dim]")
 
-        # METHODE 1 : Lire la page LinkedIn directement
+        # METHODE 1 : Page publique LinkedIn
         try:
-            r = requests.get(
-                url,
-                headers={**self.headers_web, "Accept-Language": "fr-FR,fr;q=0.9"},
-                timeout=12
-            )
+            headers = {
+                **self.headers_web,
+                "Accept-Language": "fr-FR,fr;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            }
+            r = requests.get(url, headers=headers, timeout=12, allow_redirects=True)
             if r.status_code == 200:
                 text = r.text
+                soup = BeautifulSoup(text, "html.parser")
 
-                for pattern in [
-                    r'<title>([^<]+)\s*\|',
-                    r'"name":\s*"([^"]+)"',
-                    r'og:title.*?content="([^"]+)"',
-                ]:
-                    m = re.search(pattern, text)
-                    if m:
-                        val = m.group(1).strip()
-                        if any(p in val.lower() for p in name_parts):
-                            self.target.deep_data["LinkedIn_Nom"] = val
+                # JSON-LD
+                for script in soup.find_all("script", type="application/ld+json"):
+                    try:
+                        import json
+                        data = json.loads(script.string or "{}")
+                        if data.get("name"):
+                            self.target.deep_data["LinkedIn_Nom"] = data["name"]
                             found += 1
-                            break
-
-                for pattern in [
-                    r'"headline":\s*"([^"]+)"',
-                    r'class="top-card-layout__headline[^"]*">([^<]+)<',
-                    r'"title":\s*"([^"]+)"',
-                ]:
-                    m = re.search(pattern, text)
-                    if m:
-                        val = m.group(1).strip()
-                        if val and len(val) > 3:
-                            self.target.deep_data["LinkedIn_Titre"] = val[:100]
+                        if data.get("description"):
+                            self.target.deep_data["LinkedIn_Bio"] = data["description"][:300]
                             console.print(
-                                f"    [green]LinkedIn titre : {val[:50]}[/green]"
+                                f"    [green]LinkedIn bio : {data['description'][:50]}...[/green]"
                             )
                             found += 1
-                            break
-
-                for pattern in [
-                    r'"summary":\s*"([^"]+)"',
-                    r'"description":\s*"([^"]{20,})"',
-                ]:
-                    m = re.search(pattern, text)
-                    if m:
-                        val = m.group(1).strip()
-                        if val and len(val) > 20 and any(
-                            p in val.lower() for p in name_parts
-                        ):
-                            self.target.deep_data["LinkedIn_Bio"] = val[:300]
+                        if data.get("jobTitle"):
+                            self.target.deep_data["LinkedIn_Titre"] = data["jobTitle"]
+                            console.print(
+                                f"    [green]LinkedIn titre : {data['jobTitle']}[/green]"
+                            )
                             found += 1
-                            break
-
-                for pattern in [
-                    r'"locationName":\s*"([^"]+)"',
-                    r'"geoLocationName":\s*"([^"]+)"',
-                    r'class="top-card-layout__location[^"]*">([^<]+)<',
-                ]:
-                    m = re.search(pattern, text)
-                    if m:
-                        loc = m.group(1).strip()
-                        if loc and len(loc) > 2:
-                            existing = [
-                                l.get("location") for l in self.target.locations
-                            ]
-                            if loc not in existing:
-                                self.target.locations.append({
-                                    "source": "LinkedIn", "location": loc
-                                })
-                                self.target.deep_data["LinkedIn_Ville"] = loc
+                        addr = data.get("address", {})
+                        if isinstance(addr, dict):
+                            city = addr.get("addressLocality", "") or addr.get("addressRegion", "")
+                            if city:
+                                self.target.deep_data["LinkedIn_Ville"] = city
+                                existing = [l.get("location") for l in self.target.locations]
+                                if city not in existing:
+                                    self.target.locations.append({"source": "LinkedIn", "location": city})
+                                console.print(f"    [green]LinkedIn ville : {city}[/green]")
+                                found += 1
+                        works = data.get("worksFor", [])
+                        if works:
+                            companies = ([w.get("name", "") for w in works if w.get("name")]
+                                         if isinstance(works, list) else [works.get("name", "")])
+                            if companies:
+                                self.target.deep_data["LinkedIn_Entreprise"] = " - ".join(companies[:3])
+                                console.print(f"    [green]LinkedIn entreprise : {companies[0]}[/green]")
+                                found += 1
+                        alum = data.get("alumniOf", [])
+                        if alum:
+                            schools = ([a.get("name", "") for a in alum if a.get("name")]
+                                       if isinstance(alum, list) else [alum.get("name", "")])
+                            if schools:
+                                self.target.deep_data["LinkedIn_Formation"] = " - ".join(schools[:3])
                                 console.print(
-                                    f"    [green]LinkedIn ville : {loc}[/green]"
+                                    f"    [green]LinkedIn formation : {', '.join(schools[:2])}[/green]"
                                 )
                                 found += 1
-                            break
+                    except Exception:
+                        pass
 
-                for pattern in [
-                    r'"schoolName":\s*"([^"]+)"',
-                    r'"degreeName":\s*"([^"]+)"',
-                    r'"fieldOfStudy":\s*"([^"]+)"',
-                ]:
-                    matches = re.findall(pattern, text)
-                    for m in matches[:3]:
-                        key = f"LinkedIn_Formation_{found}"
-                        self.target.deep_data[key] = m
-                        console.print(f"    [green]Formation : {m}[/green]")
-                        found += 1
+                # Meta OpenGraph
+                og_fields = {
+                    "og:title": "LinkedIn_OG_Titre",
+                    "og:description": "LinkedIn_OG_Desc",
+                    "profile:first_name": "LinkedIn_Prenom",
+                    "profile:last_name": "LinkedIn_Nom_Famille",
+                }
+                for prop, key in og_fields.items():
+                    tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+                    if tag and tag.get("content"):
+                        val = tag["content"].strip()
+                        if val and len(val) > 2:
+                            self.target.deep_data[key] = val
+                            found += 1
 
-                for pattern in [
-                    r'"companyName":\s*"([^"]+)"',
-                ]:
-                    matches = re.findall(pattern, text)
-                    companies = list(dict.fromkeys([
-                        m for m in matches if len(m) > 2
-                    ]))[:5]
-                    if companies:
-                        self.target.deep_data["LinkedIn_Experiences"] = (
-                            " · ".join(companies)
-                        )
-                        console.print(
-                            f"    [green]Experiences : "
-                            f"{', '.join(companies[:3])}[/green]"
-                        )
-                        found += len(companies)
-                        break
-
-                for pattern in [
-                    r'"connectionsCount":(\d+)',
-                    r'(\d+)\s*connexions?',
-                ]:
-                    m = re.search(pattern, text, re.I)
-                    if m:
-                        self.target.deep_data["LinkedIn_Connexions"] = m.group(1)
-                        found += 1
-                        break
+                # Regex HTML
+                patterns = {
+                    "LinkedIn_Titre": [r'"headline":"([^"]{5,100})"'],
+                    "LinkedIn_Bio": [r'"summary":"([^"]{20,500})"', r'"description":"([^"]{20,500})"'],
+                    "LinkedIn_Ville": [r'"locationName":"([^"]{3,80})"', r'"geoLocationName":"([^"]{3,80})"'],
+                    "LinkedIn_Entreprise": [r'"companyName":"([^"]{2,80})"'],
+                    "LinkedIn_Formation": [r'"schoolName":"([^"]{2,80})"'],
+                    "LinkedIn_Connexions": [r'"connectionsCount":(\d+)', r'(\d+)\+?\s*relations'],
+                }
+                for key, pats in patterns.items():
+                    if key in self.target.deep_data:
+                        continue
+                    for pat in pats:
+                        m = re.search(pat, text, re.I)
+                        if m:
+                            val = m.group(1).strip()
+                            if val and len(val) > 1:
+                                self.target.deep_data[key] = val[:200]
+                                console.print(f"    [green]{key} : {val[:40]}[/green]")
+                                found += 1
+                                break
         except Exception as e:
             console.print(f"    [dim]LinkedIn direct : {e}[/dim]")
 
-        # METHODE 2 : Google Cache
-        try:
-            cache_url = (
-                f"https://webcache.googleusercontent.com"
-                f"/search?q=cache:{url}"
-            )
-            r = requests.get(cache_url, headers=self.headers_web, timeout=10)
-            if r.status_code == 200:
-                soup = BeautifulSoup(r.text, "html.parser")
-                for tag in soup(["script", "style"]):
-                    tag.decompose()
-                text = soup.get_text(" ", strip=True)
-                if any(p in text.lower() for p in name_parts):
-                    sentences = [
-                        s.strip() for s in text.split(".")
-                        if any(p in s.lower() for p in name_parts)
-                        and 10 < len(s) < 200
-                    ]
-                    if sentences:
-                        self.target.deep_data["LinkedIn_Cache"] = (
-                            ". ".join(sentences[:3])
-                        )
-                        console.print(
-                            f"    [green]LinkedIn cache : "
-                            f"{sentences[0][:50]}...[/green]"
-                        )
-                        found += 1
-        except Exception:
-            pass
-
-        # METHODE 3 : DuckDuckGo cible
+        # METHODE 2 : DuckDuckGo snippets
         try:
             queries = [
-                f'site:linkedin.com "{name}" formation',
-                f'"{name}" linkedin "EFREI" OR "Bordeaux"',
+                f'site:linkedin.com/in "{name}"',
+                f'"{name}" linkedin "EFREI" OR "Bordeaux" OR "cybersecurite"',
+                f'linkedin "{name}" formation experiences',
             ]
             for query in queries:
                 r = requests.get(
                     "https://html.duckduckgo.com/html/",
                     params={"q": query},
-                    headers=self.headers_web,
-                    timeout=10
+                    headers=self.headers_web, timeout=10
                 )
                 soup = BeautifulSoup(r.text, "html.parser")
-                for el in soup.find_all(
-                    class_=re.compile("result__snippet")
-                )[:3]:
-                    snippet = el.get_text(" ", strip=True)
-                    if (snippet
-                            and any(p in snippet.lower() for p in name_parts)
-                            and len(snippet) > 30):
-                        key = f"LinkedIn_DDG_{found}"
-                        self.target.deep_data[key] = snippet[:200]
-                        console.print(
-                            f"    [cyan]LinkedIn DDG : {snippet[:50]}...[/cyan]"
-                        )
+                snippets = soup.find_all(class_=re.compile(r"result.snippet|result__snippet"))
+                for snippet in snippets[:4]:
+                    txt = snippet.get_text(" ", strip=True)
+                    if txt and len(txt) > 30 and any(p in txt.lower() for p in name_parts):
+                        key = f"LinkedIn_Snippet_{found}"
+                        self.target.deep_data[key] = txt[:200]
+                        console.print(f"    [cyan]LinkedIn snippet : {txt[:50]}...[/cyan]")
                         found += 1
                 time.sleep(0.5)
         except Exception:
             pass
 
         if found == 0:
-            console.print(
-                "    [dim]LinkedIn : contenu protege par authentification[/dim]"
-            )
+            console.print("    [yellow]LinkedIn : contenu protege - non authentifie[/yellow]")
+            self.target.deep_data["LinkedIn_URL"] = url
 
         return found
 
