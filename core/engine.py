@@ -34,55 +34,33 @@ class KronosEngine:
                 f"  [cyan]Username fourni : {target.username}[/cyan]"
             )
 
-        steps = [
+        # Phase 1 — Profilage initial
+        initial_steps = [
             ("Profilage IA de la cible",
              "modules.person.profiler",
              "TargetProfiler"),
-            ("Recherche ciblée par profil",
-             "modules.person.smart_searcher",
-             "SmartSearcher"),
-            ("Recherche de pseudos",
-             "modules.person.username_finder",
-             "UsernameFinder"),
             ("Sherlock — 300+ plateformes",
              "modules.person.sherlock_runner",
              "SherlockRunner"),
-            ("GitHub — profil, commits, README",
-             "modules.person.github_person",
-             "GitHubPerson"),
-            ("Email Hunter",
-             "modules.person.email_hunter",
-             "EmailHunter"),
-            ("Holehe — email sur 120+ sites",
-             "modules.person.holehe_runner",
-             "HoleheRunner"),
-            ("Fuites de données",
-             "modules.person.breach_lookup",
-             "BreachLookup"),
-            ("Google Dorking contextuel",
-             "modules.person.google_dorker",
-             "GoogleDorker"),
-            ("Pivot récursif — nouvelles ancres",
-             "modules.person.recursive_pivot",
-             "RecursivePivot"),
-            ("Crawling profond des comptes",
-             "modules.person.deep_crawler",
-             "DeepCrawler"),
-            ("Recherche infos personnelles",
-             "modules.person.personal_info_finder",
-             "PersonalInfoFinder"),
-            ("Recherche numéro de téléphone",
-             "modules.person.phone_finder",
-             "PhoneFinder"),
-            ("Recherche photos",
-             "modules.person.photo_finder",
-             "PhotoFinder"),
-            ("Analyse comportementale",
-             "modules.person.behavior_analyzer",
-             "BehaviorAnalyzer"),
-            ("Réseau de relations",
-             "modules.person.network_mapper",
-             "NetworkMapper"),
+        ]
+        self._run_steps(initial_steps, target)
+
+        # Phase 2 — Moteur de pivot recursif
+        console.print(
+            "\n  [bold cyan]◆ MOTEUR DE PIVOT RECURSIF[/bold cyan]"
+        )
+        try:
+            from modules.person.intel_engine import IntelEngine
+            engine = IntelEngine(target)
+            engine.run()
+            console.print(
+                "  [green]✓[/green] Pivot recursif termine"
+            )
+        except Exception as e:
+            console.print(f"  [red]✗[/red] IntelEngine: {e}")
+
+        # Phase 3 — Validation et analyse
+        final_steps = [
             ("Validation des résultats",
              "modules.person.result_validator",
              "ResultValidator"),
@@ -90,8 +68,8 @@ class KronosEngine:
              "modules.correlation.ai_analyst",
              "AIAnalyst"),
         ]
+        self._run_steps(final_steps, target)
 
-        self._run_steps(steps, target)
         self._show_summary(target)
         self._generate_outputs(target)
 
