@@ -40,6 +40,8 @@ class PersonTarget:
     # Contexte fourni par l'opérateur
     notes: str = ""
     company: str = ""
+    # Informations personnelles publiques
+    personal_info: Dict = field(default_factory=dict)
 
 @dataclass
 class CompanyTarget:
