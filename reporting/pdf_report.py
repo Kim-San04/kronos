@@ -536,6 +536,8 @@ def generate_pdf(target, output_path: str):
     for loc in locations:
         t.row(("LOCALISATION", loc.get("location", ""),
                f"Profil {loc.get('source', '')}", "PROBABLE"))
+    if personal.get("Telephone"):
+        t.row(("TELEPHONE", personal["Telephone"], "Pivot recursif / Web", "A VERIFIER"))
     if notes:
         t.row(("CONTEXTE", notes[:50], "Operateur", "INFO"))
 
@@ -560,15 +562,31 @@ def generate_pdf(target, output_path: str):
     linkedin_keys = {k: v for k, v in deep.items()
                      if "linkedin" in k.lower() or "LinkedIn" in k}
     if linkedin_keys:
-        section(sec, f"DONNEES LINKEDIN EXTRAITES ({len(linkedin_keys)})")
+        section(sec, "DONNEES LINKEDIN")
         sec += 1
-        t3 = Table(pdf, [55, 125])
+        t3 = Table(pdf, [60, 120])
         t3.header(["CHAMP", "VALEUR"])
+        li_order = [
+            "LinkedIn_Titre", "LinkedIn_Ville", "LinkedIn_Secteur",
+            "LinkedIn_About", "LinkedIn_Ecoles", "LinkedIn_Diplomes",
+            "LinkedIn_Domaines_Etude", "LinkedIn_Entreprises",
+            "LinkedIn_Postes", "LinkedIn_Competences", "LinkedIn_Connexions",
+        ]
+        shown = set()
+        for key in li_order:
+            if key in linkedin_keys:
+                field = key.replace("LinkedIn_", "").replace("_", " ")
+                v = linkedin_keys[key]
+                if isinstance(v, list):
+                    v = ", ".join(str(x) for x in v)
+                t3.row([field, str(v)])
+                shown.add(key)
         for k, v in linkedin_keys.items():
-            field_name = k.replace("LinkedIn_", "").replace("_", " ")
-            if isinstance(v, list):
-                v = ", ".join(str(x) for x in v)
-            t3.row([field_name, str(v)])
+            if k not in shown:
+                field = k.replace("LinkedIn_", "").replace("_", " ")
+                if isinstance(v, list):
+                    v = ", ".join(str(x) for x in v)
+                t3.row([field, str(v)[:120]])
 
     # ─── 04 DONNEES GITHUB ───
     github_keys = {k: v for k, v in deep.items()

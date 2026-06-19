@@ -18,8 +18,8 @@ class IntelEngine:
     ou profondeur max.
     """
 
-    MAX_DEPTH = 4
-    MAX_TASKS = 80
+    MAX_DEPTH = 5
+    MAX_TASKS = 150
 
     def __init__(self, target):
         self.target = target
@@ -63,14 +63,16 @@ class IntelEngine:
             self.add_task("email", e, d, "initial")
         if self.target.username:
             self.add_task("username", self.target.username, d, "initial")
-        for platform, url in self.target.social_profiles.items():
-            self.add_task("url", url, d, f"initial_{platform}")
+        for platform, url in list(self.target.social_profiles.items())[:20]:
+            self.add_task("url", url, d, f"sherlock_{platform}")
             pl = platform.lower()
             if "github" in pl:
                 u = url.rstrip("/").split("/")[-1]
-                self.add_task("github", u, d, "initial")
+                self.add_task("github", u, d, "sherlock")
             elif "linkedin" in pl:
-                self.add_task("linkedin", url, d, "initial")
+                self.add_task("linkedin", url, d, "sherlock")
+            elif "root-me" in pl or "root-me" in url.lower():
+                self.add_task("url", url, d, "rootme")
         self.add_task("name", self.target.name, d, "initial")
 
     def run(self):
@@ -479,114 +481,160 @@ class IntelEngine:
             or getattr(self.target, "linkedin_cookie", "")
         )
 
-        base_headers = {
-            **self.web_headers,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": (
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,image/avif,"
+                "image/webp,image/apng,*/*;q=0.8"
+            ),
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Sec-Ch-Ua": '"Not_A Brand";v="8","Chromium";v="120","Google Chrome";v="120"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"macOS"',
             "Sec-Fetch-Dest": "document",
             "Sec-Fetch-Mode": "navigate",
-        }
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "Cache-Control": "max-age=0",
+        })
 
         if li_cookie:
-            base_headers["Cookie"] = f"li_at={li_cookie}; lang=v=2&lang=fr-fr"
-            console.print("    [cyan]LinkedIn avec session cookie...[/cyan]")
+            session.cookies.set("li_at", li_cookie, domain=".linkedin.com")
+            session.cookies.set("lang", "v=2&lang=fr-fr", domain=".linkedin.com")
+            session.cookies.set("liap", "true", domain=".linkedin.com")
+            try:
+                session.get("https://www.linkedin.com/feed/", timeout=10)
+                time.sleep(1)
+            except Exception:
+                pass
+            console.print("    [cyan]LinkedIn session active - scraping profil...[/cyan]")
         else:
-            console.print("    [yellow]LinkedIn sans authentification[/yellow]")
+            console.print("    [yellow]LinkedIn sans cookie[/yellow]")
 
         try:
-            session = requests.Session()
-            session.headers.update(base_headers)
-
-            if li_cookie:
-                session.get("https://www.linkedin.com", timeout=8)
-                time.sleep(0.5)
-
             r = session.get(url, timeout=15, allow_redirects=True)
+
+            if r.status_code == 200 and "authwall" in r.url:
+                console.print("    [red]LinkedIn authwall - cookie invalide ou expire[/red]")
+                return self._linkedin_via_ddg(url, new)
+
             if r.status_code == 200:
-                text = r.text
-
-                patterns = {
-                    "LinkedIn_Titre": [r'"headline":"([^"]{5,200})"'],
-                    "LinkedIn_About": [
-                        r'"summary":"([^"]{20,1000})"',
-                        r'"description":"([^"]{20,500})"',
-                    ],
-                    "LinkedIn_Ville": [
-                        r'"locationName":"([^"]{3,100})"',
-                        r'"geoLocationName":"([^"]{3,100})"',
-                    ],
-                    "LinkedIn_Ecoles": [r'"schoolName":"([^"]{2,100})"'],
-                    "LinkedIn_Diplomes": [r'"degreeName":"([^"]{2,100})"'],
-                    "LinkedIn_Domaines": [r'"fieldOfStudy":"([^"]{2,100})"'],
-                    "LinkedIn_Entreprises": [r'"companyName":"([^"]{2,100})"'],
-                    "LinkedIn_Postes": [r'"title":"([^"]{3,150})"'],
-                    "LinkedIn_Connexions": [
-                        r'"connectionsCount":(\d+)',
-                        r'"followerCount":(\d+)',
-                    ],
-                }
-
-                for key, pats in patterns.items():
-                    if key in self.target.deep_data:
-                        continue
-                    all_vals = []
-                    for pat in pats:
-                        for m in re.findall(pat, text, re.I)[:5]:
-                            v = m.strip()
-                            if (v and len(v) > 1
-                                    and v not in all_vals
-                                    and "linkedin" not in v.lower()
-                                    and "http" not in v.lower()):
-                                all_vals.append(v)
-                    if all_vals:
-                        unique = list(dict.fromkeys(all_vals))[:5]
-                        self.target.deep_data[key] = " | ".join(unique)[:300]
-                        console.print(
-                            f"    [green]LinkedIn "
-                            f"{key.replace('LinkedIn_','')}: {unique[0][:50]}[/green]"
-                        )
-
-                # Location → target.locations
-                ville = self.target.deep_data.get("LinkedIn_Ville", "")
-                if ville:
-                    first_loc = ville.split("|")[0].strip()
-                    existing = [l.get("location") for l in self.target.locations]
-                    if first_loc and first_loc not in existing:
-                        self.target.locations.append(
-                            {"source": "LinkedIn", "location": first_loc}
-                        )
-
-                # Emails in HTML
-                skip_dom = ["linkedin.com", "example.com", "w3.org", "sentry.io"]
-                for e in re.findall(r'[\w\.\-]+@[\w\.\-]+\.\w{2,}', text):
-                    if not any(s in e for s in skip_dom):
-                        if e not in self.target.emails_found:
-                            self.target.emails_found.append(e)
-                            console.print(f"    [green]LinkedIn email: {e}[/green]")
-                            new.append({"type": "email", "value": e})
-
-                # Skills
-                skills = re.findall(r'"name":"([A-Z][a-zA-Z\s\+\#]{2,40})"', text)
-                if skills:
-                    filtered = [s for s in skills if len(s) > 2
-                                and not any(x in s.lower() for x in
-                                            ["linkedin", "http", "json", "null", "true", "false"])]
-                    unique = list(dict.fromkeys(filtered))[:15]
-                    if unique:
-                        self.target.deep_data["LinkedIn_Competences"] = " - ".join(unique)
-                        console.print(
-                            f"    [green]LinkedIn competences: {', '.join(unique[:4])}[/green]"
-                        )
+                if len(r.text) > 5000:
+                    console.print("    [green]LinkedIn profil accessible ![/green]")
+                else:
+                    console.print("    [yellow]LinkedIn : contenu limite[/yellow]")
+                new += self._extract_linkedin_data(r.text, url)
         except Exception as e:
             console.print(f"    [dim]LinkedIn: {e}[/dim]")
 
-        # DDG fallback
+        new += self._linkedin_via_ddg(url, [])
+        return new
+
+    def _extract_linkedin_data(self, text, url):
+        new = []
+        dd = self.target.deep_data
+
+        patterns = {
+            "LinkedIn_Titre": [
+                r'"headline":"([^"]{5,200})"',
+                r'"title":"([^"]{5,150})"',
+                r'<h2[^>]*headline[^>]*>([^<]{5,100})<',
+            ],
+            "LinkedIn_About": [
+                r'"summary":"([^"]{20,2000})"',
+                r'"description":"([^"]{20,500})"',
+            ],
+            "LinkedIn_Ville": [
+                r'"locationName":"([^"]{3,100})"',
+                r'"geoLocationName":"([^"]{3,100})"',
+                r'"addressLocality":"([^"]{3,80})"',
+            ],
+            "LinkedIn_Ecoles": [r'"schoolName":"([^"]{2,100})"'],
+            "LinkedIn_Diplomes": [r'"degreeName":"([^"]{2,100})"'],
+            "LinkedIn_Domaines_Etude": [r'"fieldOfStudy":"([^"]{2,100})"'],
+            "LinkedIn_Entreprises": [r'"companyName":"([^"]{2,100})"'],
+            "LinkedIn_Postes": [r'"title":"([^"]{3,100})"'],
+            "LinkedIn_Connexions": [
+                r'"connectionsCount":(\d+)',
+                r'"followerCount":(\d+)',
+                r'(\d+)\+?\s*relations',
+            ],
+            "LinkedIn_Secteur": [
+                r'"industryName":"([^"]{2,80})"',
+                r'"industry":"([^"]{2,80})"',
+            ],
+        }
+
+        for key, pats in patterns.items():
+            all_vals = []
+            for pat in pats:
+                for m in re.findall(pat, text, re.I)[:8]:
+                    v = m.strip()
+                    if (v and len(v) > 1 and v not in all_vals
+                            and "linkedin" not in v.lower()
+                            and "http" not in v.lower()
+                            and len(v) < 300):
+                        all_vals.append(v)
+            if all_vals:
+                unique = list(dict.fromkeys(all_vals))[:5]
+                val = " | ".join(unique)[:400]
+                if key not in dd or len(val) > len(dd.get(key, "")):
+                    dd[key] = val
+                    console.print(
+                        f"    [green]LinkedIn {key.replace('LinkedIn_','')}: "
+                        f"{val[:50]}[/green]"
+                    )
+
+        # Location → target.locations
+        ville = dd.get("LinkedIn_Ville", "")
+        if ville:
+            first_loc = ville.split("|")[0].strip()
+            existing = [l.get("location") for l in self.target.locations]
+            if first_loc and first_loc not in existing:
+                self.target.locations.append({"source": "LinkedIn", "location": first_loc})
+
+        # Emails
+        skip_dom = ["linkedin.com", "example.com", "w3.org", "sentry.io", "licdn.com", "noreply"]
+        for e in re.findall(r'[\w\.\-]+@[\w\.\-]+\.\w{2,}', text):
+            if not any(s in e for s in skip_dom):
+                if e not in self.target.emails_found:
+                    self.target.emails_found.append(e)
+                    console.print(f"    [green]LinkedIn email: {e}[/green]")
+                    new.append({"type": "email", "value": e})
+
+        # Skills
+        skills_raw = re.findall(r'"name":"([A-Z][a-zA-Z0-9\s\+\#\.]{2,40})"', text)
+        skip_words = ["linkedin", "google", "microsoft", "apple",
+                      "true", "false", "null", "undefined", "object"]
+        skills = [s for s in skills_raw if not any(x in s.lower() for x in skip_words)
+                  and len(s) > 2]
+        if skills:
+            unique_skills = list(dict.fromkeys(skills))[:15]
+            dd["LinkedIn_Competences"] = " - ".join(unique_skills)
+            console.print(f"    [green]LinkedIn competences: {', '.join(unique_skills[:5])}[/green]")
+
+        return new
+
+    def _linkedin_via_ddg(self, url, new):
         name = self.target.name
         name_parts = name.lower().split()
-        for query in [
-            f'site:linkedin.com/in "{name}"',
-            f'"{name}" linkedin formation OR entreprise',
-        ]:
+        dd = self.target.deep_data
+
+        queries = [
+            f'"{name}" site:linkedin.com',
+            f'"{name}" linkedin formation EFREI OR Bordeaux OR cybersec',
+            f'"{name}" linkedin competences OR experience',
+        ]
+
+        for i, query in enumerate(queries):
             try:
                 r = requests.get(
                     "https://html.duckduckgo.com/html/",
@@ -594,14 +642,44 @@ class IntelEngine:
                     headers=self.web_headers, timeout=10
                 )
                 soup = BeautifulSoup(r.text, "html.parser")
-                for el in soup.find_all(class_=re.compile("result__snippet"))[:4]:
-                    snippet = el.get_text(" ", strip=True)
-                    if snippet and len(snippet) > 30 and any(
-                        p in snippet.lower() for p in name_parts
-                    ):
-                        key = f"LinkedIn_Web_{len(self.target.deep_data)}"
-                        self.target.deep_data[key] = snippet[:250]
-                        console.print(f"    [cyan]LinkedIn DDG: {snippet[:50]}...[/cyan]")
+
+                for result in soup.find_all(class_=re.compile(r"result_?"))[:5]:
+                    title_el = result.find(class_=re.compile(r"result__a"))
+                    snippet_el = result.find(class_=re.compile(r"result__snippet"))
+                    url_el = result.find(class_=re.compile(r"result__url"))
+
+                    result_url = url_el.get_text(strip=True) if url_el else ""
+                    if "linkedin" not in result_url.lower():
+                        continue
+
+                    if title_el:
+                        title = title_el.get_text(" ", strip=True)
+                        if " - " in title and "LinkedIn_Titre" not in dd:
+                            titre_pro = (title.split(" - ")[1]
+                                         .replace("| LinkedIn", "")
+                                         .replace("LinkedIn", "").strip())
+                            if titre_pro and len(titre_pro) > 3:
+                                dd["LinkedIn_Titre"] = titre_pro
+                                console.print(
+                                    f"    [green]LinkedIn titre (DDG): {titre_pro[:50]}[/green]"
+                                )
+
+                    if snippet_el:
+                        snippet = snippet_el.get_text(" ", strip=True)
+                        if (snippet and len(snippet) > 20
+                                and any(p in snippet.lower() for p in name_parts)):
+                            key = f"LinkedIn_DDG_{i}"
+                            dd[key] = snippet[:250]
+                            console.print(f"    [cyan]LinkedIn DDG: {snippet[:50]}...[/cyan]")
+
+                            loc_m = re.search(
+                                r'(?:Paris|Lyon|Bordeaux|Marseille|Toulouse|Nantes|'
+                                r'Rennes|Strasbourg|Nouvelle-Aquitaine)',
+                                snippet, re.I
+                            )
+                            if loc_m and "LinkedIn_Ville" not in dd:
+                                dd["LinkedIn_Ville"] = loc_m.group(0)
+
                 time.sleep(0.5)
             except Exception:
                 pass
@@ -614,10 +692,15 @@ class IntelEngine:
             "google.com", "duckduckgo.com", "facebook.com",
             "wikipedia.org", "amazon.com", "w3.org", "schema.org",
             "cdnjs.cloudflare.com", "bing.com",
-            "discord.com", "discord.gg",
+            "discord.com", "discord.gg", "smule.com",
+            "boardgamegeek.com",
         ]
         if any(s in url for s in skip):
             return new
+
+        # Root-Me special handling
+        if "root-me.org" in url:
+            return self._scrape_rootme(url)
 
         try:
             r = requests.get(
@@ -722,22 +805,57 @@ class IntelEngine:
 
     def _pivot_phone(self, phone, depth):
         new = []
-        for query in [f'"{phone}"', f'"{phone}" site:pagesjaunes.fr']:
+        clean = re.sub(r'[\s\.\-\(\)]', '', phone)
+
+        if not (clean.startswith("06") or clean.startswith("07")):
+            return new
+        if len(re.sub(r'\D', '', clean)) != 10:
+            return new
+        if len(set(clean)) < 4:
+            return new
+
+        if "Telephone" not in self.target.personal_info:
+            self.target.personal_info["Telephone"] = clean
+            console.print(f"    [bold green]Tel valide: {clean}[/bold green]")
+
+        for q in [f'"{clean}"', f'"{clean}" {self.target.name}',
+                  f'"{clean}" site:pagesjaunes.fr']:
             try:
                 r = requests.get(
                     "https://html.duckduckgo.com/html/",
-                    params={"q": query},
-                    headers=self.web_headers, timeout=10
+                    params={"q": q},
+                    headers=self.web_headers, timeout=8
                 )
                 soup = BeautifulSoup(r.text, "html.parser")
                 for el in soup.find_all(class_=re.compile("result__snippet"))[:3]:
-                    text = el.get_text(" ", strip=True)
-                    if text and len(text) > 20:
-                        self.target.deep_data[f"Phone_Info_{phone}"] = text[:200]
-                        console.print(f"    [cyan]Tel {phone}: {text[:40]}[/cyan]")
+                    txt = el.get_text(" ", strip=True)
+                    if txt and len(txt) > 20:
+                        self.target.deep_data[f"Phone_{clean}"] = txt[:200]
+                        console.print(f"    [cyan]Tel info: {txt[:50]}[/cyan]")
                 time.sleep(0.3)
             except Exception:
                 pass
+        return new
+
+    def _scrape_rootme(self, url):
+        new = []
+        try:
+            r = requests.get(url, headers=self.web_headers, timeout=10)
+            if r.status_code == 200:
+                text = r.text
+                score_m = re.search(r'(\d+)\s*points?', text)
+                if score_m:
+                    self.target.deep_data["RootMe_Score"] = score_m.group(1) + " points"
+                    console.print(f"    [green]Root-Me score: {score_m.group(1)} pts[/green]")
+                rank_m = re.search(r'rang\s*:?\s*#?(\d+)', text, re.I)
+                if rank_m:
+                    self.target.deep_data["RootMe_Rang"] = f"#{rank_m.group(1)}"
+                    console.print(f"    [green]Root-Me rang: #{rank_m.group(1)}[/green]")
+                challs = re.findall(r'challenge[^<]{0,50}', text, re.I)
+                if challs:
+                    self.target.deep_data["RootMe_Challenges"] = str(len(challs))
+        except Exception:
+            pass
         return new
 
     # ──────────────────────────────
