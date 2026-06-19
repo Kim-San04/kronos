@@ -47,27 +47,44 @@ class RecursivePivot:
         self._already_pivoted = set()
 
     def run(self):
-        console.print("    [dim]Pivot récursif...[/dim]")
+        console.print("    [dim]Pivot recursif...[/dim]")
 
-        pivots_done = 0
+        max_iterations = 3
+        iteration = 0
 
-        for email in self.target.emails_found[:5]:
-            key = f"email:{email}"
-            if key not in self._already_pivoted:
-                self._already_pivoted.add(key)
-                pivots_done += self._pivot_from_email(email)
+        while iteration < max_iterations:
+            iteration += 1
+            new_found = 0
 
-        for platform, url in list(self.target.social_profiles.items())[:10]:
-            key = f"profile:{url}"
-            if key not in self._already_pivoted:
-                self._already_pivoted.add(key)
-                pivots_done += self._pivot_from_profile(platform, url)
+            for email in self.target.emails_found[:5]:
+                key = f"email:{email}"
+                if key not in self._already_pivoted:
+                    self._already_pivoted.add(key)
+                    new_found += self._pivot_from_email(email)
 
-        if pivots_done:
+            for platform, url in list(
+                self.target.social_profiles.items()
+            )[:15]:
+                key = f"profile:{url}"
+                if key not in self._already_pivoted:
+                    self._already_pivoted.add(key)
+                    new_found += self._pivot_from_profile(platform, url)
+
+            if new_found == 0:
+                break
+
             console.print(
-                f"    [cyan]{pivots_done} nouvelle(s) "
-                f"découverte(s) par pivot[/cyan]"
+                f"    [cyan]Iteration {iteration} : "
+                f"{new_found} nouvelle(s) decouverte(s)[/cyan]"
             )
+
+            from modules.person.deep_crawler import DeepCrawler
+            DeepCrawler(self.target).run()
+
+        total = len(self.target.social_profiles)
+        console.print(
+            f"    [bold cyan]{total} comptes apres pivot recursif[/bold cyan]"
+        )
 
     def _pivot_from_email(self, email: str) -> int:
         new_found = 0

@@ -42,6 +42,8 @@ class PersonTarget:
     company: str = ""
     # Informations personnelles publiques
     personal_info: Dict = field(default_factory=dict)
+    # Données extraites en profondeur
+    deep_data: Dict = field(default_factory=dict)
 
 @dataclass
 class CompanyTarget:

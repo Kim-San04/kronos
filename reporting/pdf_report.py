@@ -268,6 +268,7 @@ def generate_pdf(target, output_path: str):
     commit_emails = github_data.get("commit_emails", [])
     profile_type = getattr(target, "profile_type", "")
     personal_info = getattr(target, "personal_info", {})
+    deep_data = getattr(target, "deep_data", {})
     activity = getattr(target, "activity_hours", {})
     peak = activity.get("peak_hour", None)
     connections = getattr(target, "connections", [])
@@ -767,7 +768,26 @@ def generate_pdf(target, output_path: str):
                 widths=[10, 100, 70]
             )
 
-    # ─── SECTION 7 : INFORMATIONS PERSONNELLES ───
+    # ─── SECTION 7 : DONNÉES EXTRAITES EN PROFONDEUR ───
+    if deep_data:
+        section(sec, f"DONNEES EXTRAITES EN PROFONDEUR ({len(deep_data)})")
+        sec += 1
+
+        th("SOURCE", "TYPE", "VALEUR", widths=[40, 40, 100])
+        for key, value in deep_data.items():
+            parts = key.split("_", 1)
+            source = parts[0] if parts else key
+            dtype = parts[1].replace("_", " ") if len(parts) > 1 else ""
+            if isinstance(value, list):
+                value = ", ".join(str(v) for v in value[:5])
+            tr(
+                source[:18],
+                dtype[:18],
+                str(value)[:90],
+                widths=[40, 40, 100]
+            )
+
+    # ─── SECTION 8 : INFORMATIONS PERSONNELLES ───
     if personal_info:
         section(sec, "INFORMATIONS PERSONNELLES")
         sec += 1
