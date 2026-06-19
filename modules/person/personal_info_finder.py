@@ -82,6 +82,17 @@ class PersonalInfoFinder:
                     console.print(f"    [green]Annuaire : {url}[/green]")
                     return
 
+    def _is_valid_french_phone(self, phone: str) -> bool:
+        digits = re.sub(r'[\s\.\-\(\)]', '', phone)
+        if digits.startswith("+33"):
+            digits = "0" + digits[3:]
+        if len(digits) != 10:
+            return False
+        if not digits.startswith("0"):
+            return False
+        valid_prefixes = ("06", "07", "01", "02", "03", "04", "05", "08", "09")
+        return digits[:2] in valid_prefixes
+
     def _search_phone(self, name: str):
         queries = [
             f'"{name}" +33',
@@ -99,7 +110,7 @@ class PersonalInfoFinder:
                     for pattern in PHONE_PATTERNS:
                         for phone in re.findall(pattern, r.text):
                             clean = re.sub(r'[\s\.\-]', '', phone)
-                            if len(clean) >= 10:
+                            if self._is_valid_french_phone(clean):
                                 self._set_info("Telephone", clean)
                                 console.print(
                                     f"    [green]Tel : {clean}[/green]"
@@ -154,7 +165,7 @@ class PersonalInfoFinder:
                 for pattern in PHONE_PATTERNS[:2]:
                     for phone in re.findall(pattern, r.text):
                         clean = re.sub(r'[\s\.\-]', '', phone)
-                        if len(clean) >= 10:
+                        if self._is_valid_french_phone(clean):
                             self._set_info("Telephone", clean)
 
                 # Emails supplémentaires

@@ -84,16 +84,24 @@ def categorize_profiles(profiles: dict) -> dict:
 
 
 def format_breach(breach: dict) -> str:
-    name = breach.get("Name") or breach.get("name", "Service inconnu")
-    date = breach.get("date") or breach.get("BreachDate", "")
-    if isinstance(name, dict):
-        name = str(name)
-    desc = "Fuite de donnees detectee"
-    if name and name not in ["?", "{}", "Service inconnu"]:
-        desc = f"Fuite detectee : {safe(name)}"
-    if date and len(str(date)) >= 4:
-        desc += f" (en {str(date)[:4]})"
-    return desc
+    name_raw = breach.get("Name") or breach.get("name", "")
+    if isinstance(name_raw, dict):
+        name_raw = name_raw.get("name", "") or name_raw.get("Name", "")
+    name_clean = (
+        str(name_raw)
+        .replace("{", "").replace("}", "")
+        .replace("'name':", "").replace("'Name':", "")
+        .replace("'date':", "").replace("'BreachDate':", "")
+        .replace("''", "").replace('""', "")
+        .strip(" ,")
+    )
+    if not name_clean or name_clean in ["?", "None"]:
+        name_clean = "Service non identifie"
+    date_raw = breach.get("date") or breach.get("BreachDate", "")
+    date_str = ""
+    if date_raw and len(str(date_raw)) >= 4:
+        date_str = f" (en {str(date_raw)[:4]})"
+    return safe(f"Fuite detectee : {name_clean}{date_str}")
 
 
 def format_holehe(platform: str, value: str) -> tuple:

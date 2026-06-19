@@ -2,6 +2,11 @@ from rich.console import Console
 
 console = Console()
 
+KNOWN_FALSE_POSITIVES = [
+    "boardgamegeek", "smule", "limit", "discord.com",
+]
+
+
 class ResultValidator:
     """
     Valide que les résultats trouvés correspondent
@@ -42,6 +47,15 @@ class ResultValidator:
             if len(p) > 2
         ]
         confirmed_username = self.target.username
+
+        for platform in list(self.target.social_profiles):
+            url = self.target.social_profiles[platform]
+            combined = platform.lower() + " " + url.lower()
+            if any(fp in combined for fp in KNOWN_FALSE_POSITIVES):
+                del self.target.social_profiles[platform]
+                console.print(
+                    f"    [yellow]Faux positif supprime : {platform}[/yellow]"
+                )
 
         validated = {}
         for platform, url in self.target.social_profiles.items():
