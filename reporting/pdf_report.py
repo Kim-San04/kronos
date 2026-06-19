@@ -1,5 +1,6 @@
 from fpdf import FPDF
 from datetime import datetime
+import math
 import os
 import re
 
@@ -239,6 +240,58 @@ class KronosPDF(FPDF):
         self.set_font("Courier", "", 7)
         self.set_text_color(150, 150, 150)
         self.cell(0, 4, f"- {self.page_no() - 1} -", align="C")
+
+
+def th(pdf, headers, widths):
+    pdf.set_fill_color(235, 235, 235)
+    pdf.set_font("Courier", "", 7)
+    pdf.set_text_color(90, 90, 90)
+    pdf.set_draw_color(180, 180, 180)
+    pdf.set_line_width(0.2)
+    y = pdf.get_y()
+    x_start = 15
+    for i, (h, w) in enumerate(zip(headers, widths)):
+        x = x_start + sum(widths[:i])
+        pdf.set_xy(x, y)
+        pdf.cell(
+            w, 7,
+            safe(h.upper())[:20],
+            border=1, fill=True, align="L",
+            new_x="RIGHT", new_y="LAST"
+        )
+    pdf.set_xy(x_start, y + 7)
+
+
+def tr(pdf, cells, widths, bold=False, line_h=5):
+    font_style = "B" if bold else ""
+    pdf.set_font("Helvetica", font_style, 9)
+    max_lines = 1
+    for cell, w in zip(cells, widths):
+        txt = safe(str(cell or ""))
+        chars_per_line = max(1, int((w - 2) / 1.9))
+        lines = math.ceil(len(txt) / chars_per_line) if txt else 1
+        max_lines = max(max_lines, min(lines, 5))
+    row_h = max_lines * line_h + 2
+
+    if pdf.get_y() + row_h > pdf.h - 20:
+        pdf.add_page()
+
+    y_start = pdf.get_y()
+    x_start = 15
+
+    for i, (cell, w) in enumerate(zip(cells, widths)):
+        txt = safe(str(cell or "N/A"))
+        x = x_start + sum(widths[:i])
+        pdf.set_draw_color(200, 200, 200)
+        pdf.set_line_width(0.1)
+        pdf.rect(x, y_start, w, row_h)
+        pdf.set_font("Helvetica", font_style, 9)
+        pdf.set_text_color(20, 20, 20)
+        pdf.set_xy(x + 1, y_start + 1)
+        pdf.multi_cell(w - 2, line_h, txt[:200], border=0)
+        pdf.set_xy(x_start + sum(widths[:i + 1]), y_start)
+
+    pdf.set_xy(x_start, y_start + row_h)
 
 
 def generate_pdf(target, output_path: str):
@@ -537,65 +590,11 @@ def generate_pdf(target, output_path: str):
         pdf.line(15, pdf.get_y(), 195, pdf.get_y())
         pdf.ln(4)
 
-    def th(*headers, widths=None):
-        if widths is None:
-            w = int(180 / len(headers))
-            widths = [w] * len(headers)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.set_font("Courier", "", 7)
-        pdf.set_text_color(100, 100, 100)
-        pdf.set_draw_color(180, 180, 180)
-        pdf.set_line_width(0.2)
-        for i, h in enumerate(headers):
-            is_last = (i == len(headers) - 1)
-            pdf.cell(
-                widths[i], 6,
-                safe(h.upper()),
-                border=1, fill=True, align="L",
-                new_x="LMARGIN" if is_last else "RIGHT",
-                new_y="NEXT" if is_last else "LAST"
-            )
-
-    def tr(*cells, widths=None):
-        if widths is None:
-            w = int(180 / len(cells))
-            widths = [w] * len(cells)
-        pdf.set_font("Helvetica", "", 9)
-        pdf.set_text_color(20, 20, 20)
-        pdf.set_draw_color(200, 200, 200)
-        pdf.set_fill_color(255, 255, 255)
-        pdf.set_line_width(0.1)
-
-        # Estimer la hauteur max de la ligne
-        max_h = 6
-        for i, cell in enumerate(cells):
-            txt = safe(str(cell or ""))
-            chars_per_line = max(1, int((widths[i] - 2) / 2))
-            lines = max(1, (len(txt) + chars_per_line - 1) // chars_per_line)
-            max_h = max(max_h, lines * 5 + 2)
-        max_h = min(max_h, 30)
-
-        start_y = pdf.get_y()
-        for i, cell in enumerate(cells):
-            txt = safe(str(cell or "N/A"))
-            x = pdf.get_x()
-            pdf.rect(x, start_y, widths[i], max_h)
-            pdf.set_xy(x + 1, start_y + 1)
-            pdf.multi_cell(
-                widths[i] - 2, 5, txt[:200], border=0,
-                new_x="LMARGIN", new_y="NEXT"
-            )
-            pdf.set_xy(x + widths[i], start_y)
-        pdf.set_y(start_y + max_h)
-
     # ─── SECTION 1 : IDENTIFIANTS ───
     section(sec, "IDENTIFIANTS ET CONTACTS")
     sec += 1
 
-    th(
-        "TYPE", "VALEUR", "SOURCE", "FIABILITE",
-        widths=[38, 70, 52, 20]
-    )
+    th(pdf, ["TYPE", "VALEUR", "SOURCE", "FIABILITE"], [38, 70, 52, 20])
 
     id_rows = []
     for email in emails:
@@ -633,17 +632,15 @@ def generate_pdf(target, output_path: str):
         id_rows.append(("CONTEXTE CONNU", notes[:80], "Fourni par l'operateur", "INFO"))
 
     for row in id_rows:
-        tr(*row, widths=[38, 70, 52, 20])
+        tr(pdf, list(row), [38, 70, 52, 20])
 
     # ─── SECTION 2 : COMPTES ───
-    section(sec, "COMPTES EN LIGNE — DETAIL")
+    section(sec, "COMPTES EN LIGNE - DETAIL")
     sec += 1
 
-    th(
-        "PLATEFORME", "URL / IDENTIFIANT",
-        "DONNEES TROUVEES", "CATEGORIE", "STATUT",
-        widths=[28, 42, 62, 24, 24]
-    )
+    th(pdf,
+       ["PLATEFORME", "URL / IDENTIFIANT", "DONNEES TROUVEES", "CATEGORIE", "STATUT"],
+       [28, 42, 62, 24, 24])
 
     for platform, url in profiles.items():
         clean = (platform
@@ -661,28 +658,23 @@ def generate_pdf(target, output_path: str):
         elif len(url) > 40:
             display_url = url[:37] + "..."
 
-        tr(
-            clean[:16],
-            display_url[:38],
-            details[:90],
-            category[:20],
-            status,
-            widths=[28, 42, 62, 24, 24]
-        )
+        tr(pdf,
+           [clean[:16], display_url[:38], details[:90], category[:20], status],
+           [28, 42, 62, 24, 24])
 
     # ─── SECTION 3 : FUITES ───
     if breaches:
         section(sec, f"INCIDENTS DE SECURITE ({len(breaches)} DETECTE(S))")
         sec += 1
 
-        th(
-            "INCIDENT", "DATE", "DONNEES EXPOSEES", "SOURCE",
-            widths=[32, 20, 80, 48]
-        )
+        th(pdf,
+           ["INCIDENT", "DATE", "DONNEES EXPOSEES", "SOURCE"],
+           [32, 20, 80, 48])
         for breach in breaches:
             bd = format_breach(breach)
-            tr(bd["name"], bd["date"], bd["exposed"], bd["source"],
-               widths=[32, 20, 80, 48])
+            tr(pdf,
+               [bd["name"], bd["date"], bd["exposed"], bd["source"]],
+               [32, 20, 80, 48])
 
     # ─── SECTION 4 : PROFIL COMPORTEMENTAL ───
     section(sec, "PROFIL COMPORTEMENTAL")
@@ -730,32 +722,30 @@ def generate_pdf(target, output_path: str):
         ))
 
     if behavior_rows:
-        th("CRITERE", "VALEUR", "SOURCE / METHODE", widths=[42, 72, 66])
+        th(pdf, ["CRITERE", "VALEUR", "SOURCE / METHODE"], [42, 72, 66])
         for row in behavior_rows:
-            tr(*row, widths=[42, 72, 66])
+            tr(pdf, list(row), [42, 72, 66])
 
     # ─── SECTION 5 : CONNEXIONS ───
     if connections:
         section(sec, f"RESEAU DE RELATIONS ({len(connections)} CONNEXION(S))")
         sec += 1
 
-        th("USERNAME", "PLATEFORME", "TYPE DE LIEN", "URL",
-           widths=[40, 30, 30, 80])
+        th(pdf, ["USERNAME", "PLATEFORME", "TYPE DE LIEN", "URL"], [40, 30, 30, 80])
         for conn in connections[:20]:
-            tr(
-                conn.get("username", "N/A")[:18],
+            tr(pdf,
+               [conn.get("username", "N/A")[:18],
                 conn.get("platform", "N/A")[:14],
                 conn.get("type", "N/A")[:14],
-                conn.get("url", "N/A")[:50],
-                widths=[40, 30, 30, 80]
-            )
+                conn.get("url", "N/A")[:50]],
+               [40, 30, 30, 80])
 
-    # ─── SECTION 6 : CORRÉLATIONS IA ───
+    # ─── SECTION 6 : CORRELATIONS IA ───
     if correlations:
         section(sec, f"CORRELATIONS IDENTIFIEES ({len(correlations)})")
         sec += 1
 
-        th("N°", "CORRELATION", "ELEMENTS RELIES", widths=[10, 100, 70])
+        th(pdf, ["N", "CORRELATION", "ELEMENTS RELIES"], [10, 100, 70])
         for i, corr in enumerate(correlations, 1):
             if not corr.strip():
                 continue
@@ -763,42 +753,36 @@ def generate_pdf(target, output_path: str):
             elem_str = " · ".join([
                 e[0] or e[1] for e in elements[:3]
             ]) if elements else ""
-            tr(
-                str(i), safe(corr[:95]), safe(elem_str[:65]),
-                widths=[10, 100, 70]
-            )
+            tr(pdf,
+               [str(i), safe(corr[:95]), safe(elem_str[:65])],
+               [10, 100, 70])
 
-    # ─── SECTION 7 : DONNÉES EXTRAITES EN PROFONDEUR ───
+    # ─── SECTION 7 : DONNEES EXTRAITES EN PROFONDEUR ───
     if deep_data:
         section(sec, f"DONNEES EXTRAITES EN PROFONDEUR ({len(deep_data)})")
         sec += 1
 
-        th("SOURCE", "TYPE", "VALEUR", widths=[40, 40, 100])
+        th(pdf, ["SOURCE", "TYPE", "VALEUR"], [40, 40, 100])
         for key, value in deep_data.items():
             parts = key.split("_", 1)
             source = parts[0] if parts else key
             dtype = parts[1].replace("_", " ") if len(parts) > 1 else ""
             if isinstance(value, list):
                 value = ", ".join(str(v) for v in value[:5])
-            tr(
-                source[:18],
-                dtype[:18],
-                str(value)[:90],
-                widths=[40, 40, 100]
-            )
+            tr(pdf,
+               [source[:18], dtype[:18], str(value)[:90]],
+               [40, 40, 100])
 
     # ─── SECTION 8 : INFORMATIONS PERSONNELLES ───
     if personal_info:
         section(sec, "INFORMATIONS PERSONNELLES")
         sec += 1
 
-        th("TYPE", "VALEUR", "SOURCE", "FIABILITE", widths=[38, 70, 52, 20])
+        th(pdf, ["TYPE", "VALEUR", "SOURCE", "FIABILITE"], [38, 70, 52, 20])
         for key, value in personal_info.items():
-            tr(
-                key.upper(), str(value)[:60],
-                "Annuaire / Web", "A VERIFIER",
-                widths=[38, 70, 52, 20]
-            )
+            tr(pdf,
+               [key.upper(), str(value)[:60], "Annuaire / Web", "A VERIFIER"],
+               [38, 70, 52, 20])
 
     try:
         pdf.output(output_path)

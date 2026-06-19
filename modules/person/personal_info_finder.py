@@ -83,15 +83,28 @@ class PersonalInfoFinder:
                     return
 
     def _is_valid_french_phone(self, phone: str) -> bool:
-        digits = re.sub(r'[\s\.\-\(\)]', '', phone)
-        if digits.startswith("+33"):
-            digits = "0" + digits[3:]
+        clean = re.sub(r'[\s\.\-\(\)]', '', phone)
+
+        if not (clean.startswith("06")
+                or clean.startswith("07")
+                or clean.startswith("+336")
+                or clean.startswith("+337")):
+            return False
+
+        digits = re.sub(r'\D', '', clean)
         if len(digits) != 10:
             return False
-        if not digits.startswith("0"):
+
+        if len(set(digits)) < 4:
             return False
-        valid_prefixes = ("06", "07", "01", "02", "03", "04", "05", "08", "09")
-        return digits[:2] in valid_prefixes
+
+        if digits in [
+            "0123456789", "9876543210",
+            "0711107071", "0600000000",
+        ]:
+            return False
+
+        return True
 
     def _search_phone(self, name: str):
         queries = [

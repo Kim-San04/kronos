@@ -12,6 +12,16 @@ class NetworkMapper:
         if self.token:
             self.headers["Authorization"] = f"token {self.token}"
 
+    def _add_connection(self, conn: dict):
+        username = conn.get("username", "")
+        platform = conn.get("platform", "")
+        existing = [
+            (c.get("username"), c.get("platform"))
+            for c in self.target.connections
+        ]
+        if (username, platform) not in existing:
+            self.target.connections.append(conn)
+
     def run(self):
         username = self.target.github_data.get("username")
         if not username:
@@ -19,7 +29,7 @@ class NetworkMapper:
 
         followers = self._get_followers(username)
         for f in followers[:10]:
-            self.target.connections.append({
+            self._add_connection({
                 "platform": "GitHub",
                 "type": "follower",
                 "username": f.get("login"),
@@ -27,7 +37,7 @@ class NetworkMapper:
             })
 
         console.print(
-            f"    [cyan]{len(followers)} connexions GitHub identifiées[/cyan]"
+            f"    [cyan]{len(followers)} connexions GitHub identifiees[/cyan]"
         )
 
     def _get_followers(self, username):
