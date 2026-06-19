@@ -70,6 +70,11 @@ Examples:
         help="Entreprise connue de la cible (personne)"
     )
     parser.add_argument(
+        "--linkedin-cookie",
+        metavar="COOKIE",
+        help="Cookie de session LinkedIn (li_at) pour acces authentifie"
+    )
+    parser.add_argument(
         "--output", "-o",
         metavar="DIR",
         default="./output",

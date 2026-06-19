@@ -145,7 +145,7 @@ def get_category(platform, url) -> str:
     return "Autre"
 
 
-def format_breach(breach: dict) -> tuple:
+def format_breach(breach: dict) -> dict:
     name = breach.get("Name") or breach.get("name", "")
     if isinstance(name, dict):
         name = name.get("name", "")
@@ -172,7 +172,23 @@ def format_breach(breach: dict) -> tuple:
             exposed = v
             break
 
-    return (trunc(name, 28), trunc(date, 12), trunc(exposed, 55), trunc(source, 20))
+    password = breach.get("password", "")
+    hash_val = breach.get("hash", "")
+    hash_type = breach.get("hash_type", "")
+    database = breach.get("database", "")
+    email = breach.get("email", "")
+
+    return {
+        "name": safe(name),
+        "date": safe(date),
+        "source": safe(source),
+        "exposed": safe(exposed),
+        "email": safe(email),
+        "password": safe(password),
+        "hash": safe(hash_val[:40]) if hash_val else "",
+        "hash_type": safe(hash_type),
+        "database": safe(database),
+    }
 
 
 class KronosPDF(FPDF):
@@ -589,10 +605,25 @@ def generate_pdf(target, output_path: str):
     if breaches:
         section(sec, f"INCIDENTS DE SECURITE ({len(breaches)})")
         sec += 1
-        t4 = Table(pdf, [32, 20, 58, 20])
-        t4.header(["INCIDENT", "DATE", "DONNEES EXPOSEES", "SOURCE"])
+
         for b in breaches:
-            t4.row(list(format_breach(b)))
+            bd = format_breach(b)
+            t_b = Table(pdf, [55, 125])
+            t_b.header(["CHAMP", "DETAIL"])
+            t_b.row(["INCIDENT", bd["name"]], bold=True)
+            t_b.row(["DATE", bd["date"]])
+            if bd["email"]:
+                t_b.row(["EMAIL COMPROMIS", bd["email"]])
+            if bd["database"]:
+                t_b.row(["BASE DE DONNEES", bd["database"]])
+            t_b.row(["DONNEES EXPOSEES", bd["exposed"]])
+            if bd["password"]:
+                t_b.row(["MOT DE PASSE EXPOSE", bd["password"]])
+            if bd["hash"]:
+                ht = bd["hash_type"] or "INCONNU"
+                t_b.row([f"HASH ({ht})", bd["hash"]])
+            t_b.row(["SOURCE DETECTION", bd["source"]])
+            pdf.ln(2)
 
     # ─── 07 COMPORTEMENT ───
     section(sec, "PROFIL COMPORTEMENTAL")

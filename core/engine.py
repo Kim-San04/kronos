@@ -24,6 +24,10 @@ class KronosEngine:
             notes=getattr(self.args, "notes", "") or "",
             company=getattr(self.args, "employer", "") or "",
         )
+        target.linkedin_cookie = (
+            getattr(self.args, "linkedin_cookie", None)
+            or os.getenv("LINKEDIN_SESSION_COOKIE")
+        )
 
         if target.username:
             console.print(
